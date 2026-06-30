@@ -1,30 +1,134 @@
 import { useFonts } from 'expo-font';
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import {
+  DarkTheme,
+  DefaultTheme,
+  Stack,
+  ThemeProvider,
+  useRouter,
+  useSegments,
+} from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
+import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { ImportQueueProvider } from '@/contexts/ImportQueueContext';
+import { Colors } from '@/constants/theme';
+import { isOnboardingCompleted } from '@/lib/profile';
+import { fetchRankedRatings } from '@/lib/ranking';
 
-export {
-  // Catch any errors thrown by the Layout component.
-  ErrorBoundary,
-} from 'expo-router';
+export { ErrorBoundary } from 'expo-router';
 
-export const unstable_settings = {
-  // Ensure that reloading on `/modal` keeps a back button present.
-  initialRouteName: '(tabs)',
+SplashScreen.preventAutoHideAsync();
+
+const LightTheme = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    primary: Colors.light.tint,
+    background: Colors.light.background,
+    card: Colors.light.background,
+    text: Colors.light.text,
+    border: Colors.light.border,
+  },
 };
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
-SplashScreen.preventAutoHideAsync();
+const AppDarkTheme = {
+  ...DarkTheme,
+  colors: {
+    ...DarkTheme.colors,
+    primary: Colors.dark.tint,
+    background: Colors.dark.background,
+    card: Colors.dark.background,
+    text: Colors.dark.text,
+    border: Colors.dark.border,
+  },
+};
+
+function AuthGate({ children }: { children: React.ReactNode }) {
+  const { session, loading } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (loading) return;
+
+    const inAuthGroup = segments[0] === '(auth)';
+
+    if (!session && !inAuthGroup) {
+      router.replace('/(auth)/login');
+    } else if (session && inAuthGroup) {
+      router.replace('/(tabs)');
+    }
+  }, [session, loading, segments, router]);
+
+  return children;
+}
+
+function OnboardingGate({ children }: { children: React.ReactNode }) {
+  const { user, session, loading, isSpotifyUser } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+  const colorScheme = useColorScheme() ?? 'light';
+  const colors = Colors[colorScheme];
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    async function checkOnboarding() {
+      if (loading || !user || !session) {
+        setChecking(false);
+        return;
+      }
+
+      const rootSegment = segments[0] as string | undefined;
+      const inAuth = rootSegment === '(auth)';
+      const inOnboarding = rootSegment === 'onboarding';
+      const inCompare = rootSegment === 'compare';
+
+      if (inAuth || inOnboarding || inCompare) {
+        setChecking(false);
+        return;
+      }
+
+      try {
+        const completed = await isOnboardingCompleted(user.id);
+        if (completed || !isSpotifyUser) {
+          setChecking(false);
+          return;
+        }
+
+        const ratings = await fetchRankedRatings(user.id);
+        if (ratings.length === 0) {
+          router.replace('/onboarding/import' as '/(tabs)');
+        }
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setChecking(false);
+      }
+    }
+
+    checkOnboarding();
+  }, [user, session, loading, isSpotifyUser, segments, router]);
+
+  if (checking) {
+    return (
+      <View style={[styles.loading, { backgroundColor: colors.background }]}>
+        <ActivityIndicator color={colors.tint} />
+      </View>
+    );
+  }
+
+  return children;
+}
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
 
-  // Expo Router uses Error Boundaries to catch errors in the navigation tree.
   useEffect(() => {
     if (error) throw error;
   }, [error]);
@@ -39,18 +143,42 @@ export default function RootLayout() {
     return null;
   }
 
-  return <RootLayoutNav />;
+  return (
+    <AuthProvider>
+      <ImportQueueProvider>
+        <RootLayoutNav />
+      </ImportQueueProvider>
+    </AuthProvider>
+  );
 }
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-      </Stack>
+    <ThemeProvider value={colorScheme === 'dark' ? AppDarkTheme : LightTheme}>
+      <AuthGate>
+        <OnboardingGate>
+          <Stack>
+            <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+            <Stack.Screen
+              name="compare/[trackId]"
+              options={{ title: 'Rank this song', presentation: 'modal' }}
+            />
+            <Stack.Screen name="song/[ratingId]" options={{ title: 'Song details' }} />
+          </Stack>
+        </OnboardingGate>
+      </AuthGate>
     </ThemeProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  loading: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});
