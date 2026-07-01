@@ -14,6 +14,7 @@ import {
   isSpotifyEmailVerificationCallback,
   startSpotifyOAuth,
 } from '@/lib/oauth';
+import { confirmDestructive } from '@/lib/confirm';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -29,6 +30,7 @@ type AuthContextType = {
   signInWithSpotify: () => Promise<void>;
   getSpotifyAccessToken: () => Promise<string | null>;
   signOut: () => Promise<void>;
+  requestSignOut: () => void;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -178,7 +180,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    if (error) {
+      const { error: localError } = await supabase.auth.signOut({ scope: 'local' });
+      if (localError) throw localError;
+    }
+
+    setSession(null);
+    setSpotifyAccessToken(null);
+  };
+
+  const requestSignOut = () => {
+    confirmDestructive('Sign out', 'Are you sure you want to sign out?', 'Sign out', signOut);
   };
 
   return (
@@ -194,6 +206,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signInWithSpotify,
         getSpotifyAccessToken,
         signOut,
+        requestSignOut,
       }}>
       {children}
     </AuthContext.Provider>

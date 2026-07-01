@@ -1,7 +1,6 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import {
-  Alert,
   FlatList,
   RefreshControl,
   ScrollView,
@@ -58,7 +57,7 @@ export default function RankedListScreen() {
   const { colors, spacing } = getTheme(colorScheme);
   const { width } = useWindowDimensions();
   const isWide = width >= layout.breakpointWide;
-  const { user, signOut, isSpotifyUser } = useAuth();
+  const { user, requestSignOut, isSpotifyUser } = useAuth();
   const { getCurrentTrackId, getProgress, isActive } = useImportQueue();
   const router = useRouter();
   const { highlight } = useLocalSearchParams<{ highlight?: string }>();
@@ -137,13 +136,6 @@ export default function RankedListScreen() {
     router.push('/(tabs)/search');
   };
 
-  const handleSignOut = () => {
-    Alert.alert('Sign out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign out', style: 'destructive', onPress: signOut },
-    ]);
-  };
-
   if (loading) {
     return <LoadingState />;
   }
@@ -205,7 +197,7 @@ export default function RankedListScreen() {
           onViewRanking={ratings.length > 0 ? () => setShowFullRanking((prev) => !prev) : undefined}
           showFullRanking={showFullRanking}
           showSignOut={!isWide}
-          onSignOut={handleSignOut}
+          onSignOut={requestSignOut}
         />
 
         <DashboardCollectionMeta

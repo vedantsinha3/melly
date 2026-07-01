@@ -1,6 +1,6 @@
 import { SymbolView } from 'expo-symbols';
 import { Tabs } from 'expo-router';
-import { Alert, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { AppSidebar } from '@/components/navigation/AppSidebar';
 import { getTheme, layout } from '@/constants/theme';
@@ -11,19 +11,12 @@ export default function TabLayout() {
   const colorScheme = useColorScheme() ?? 'light';
   const { colors } = getTheme(colorScheme);
   const { width } = useWindowDimensions();
-  const { signOut } = useAuth();
+  const { requestSignOut } = useAuth();
   const isWide = width >= layout.breakpointWide;
-
-  const handleSignOut = () => {
-    Alert.alert('Sign out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign out', style: 'destructive', onPress: signOut },
-    ]);
-  };
 
   return (
     <View style={[styles.shell, { backgroundColor: colors.background }]}>
-      <AppSidebar onSignOut={handleSignOut} />
+      <AppSidebar onSignOut={requestSignOut} />
       <View style={styles.main}>
         <Tabs
           tabBar={isWide ? () => null : undefined}
@@ -70,7 +63,7 @@ export default function TabLayout() {
             name="search"
             options={{
               title: 'Log song',
-              headerShown: !isWide,
+              headerShown: false,
               tabBarIcon: ({ color }) => (
                 <SymbolView
                   name={{ ios: 'plus.circle.fill', android: 'add_circle', web: 'add_circle' }}

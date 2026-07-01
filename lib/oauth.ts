@@ -84,7 +84,8 @@ export async function startSpotifyOAuth(): Promise<void> {
     options: {
       redirectTo,
       skipBrowserRedirect: true,
-      scopes: 'user-top-read user-read-email',
+      scopes:
+        'user-top-read user-read-email user-read-recently-played user-library-read playlist-read-private',
     },
   });
 

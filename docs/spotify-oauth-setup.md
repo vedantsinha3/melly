@@ -25,8 +25,11 @@ Required for **Sign in with Spotify** and **top tracks import**.
 
 ## Scopes used
 
-- `user-top-read` — fetch top tracks for onboarding import
+- `user-top-read` — top tracks and on-repeat picks
 - `user-read-email` — user profile in Supabase
+- `user-read-recently-played` — recently played carousel on Log Song
+- `user-library-read` — liked and recently added tracks
+- `playlist-read-private` — Discover Weekly and Release Radar
 
 ## Verify
 

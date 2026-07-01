@@ -76,7 +76,7 @@ export default function CompareScreen() {
         clearQueue();
       }
 
-      router.replace({ pathname: '/(tabs)', params: { highlight: ratingId } });
+      router.replace('/(tabs)/search');
     },
     [user, isActive, advanceToNext, clearQueue, router],
   );
