@@ -174,7 +174,12 @@ export default function RankedListScreen() {
   const insightsBlock = (
     <View style={[isWide ? styles.insightsRow : styles.insightsStack, { gap: spacing.md }]}>
       <View style={isWide ? styles.chartCol : undefined}>
-        <DashboardScoreChart scoreBuckets={dashboard.tasteProfile.scoreBuckets} lowData={lowData} />
+        <DashboardScoreChart
+          histogram={dashboard.tasteProfile.scoreHistogram}
+          averageScore={dashboard.summary.averageScore}
+          profile={dashboard.tasteProfile.profile}
+          lowData={lowData}
+        />
       </View>
       <View style={isWide ? styles.activityCol : undefined}>
         <DashboardActivityList

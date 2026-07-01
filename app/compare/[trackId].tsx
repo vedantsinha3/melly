@@ -1,10 +1,12 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 
 import { ComparisonPair } from '@/components/ComparisonPair';
+import { ComparisonProgress } from '@/components/compare/ComparisonProgress';
+import { ComparisonSkeleton } from '@/components/compare/ComparisonSkeleton';
 import { useColorScheme } from '@/components/useColorScheme';
-import { LoadingState, Screen, Text } from '@/components/ui';
+import { Button, Screen, Text } from '@/components/ui';
 import { getTheme } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useImportQueue } from '@/contexts/ImportQueueContext';
@@ -12,6 +14,7 @@ import { markOnboardingCompleted } from '@/lib/profile';
 import {
   applyComparison,
   estimateComparisonCount,
+  estimatePlacement,
   fetchRankedRatings,
   finalizeRating,
   getComparisonIndex,
@@ -21,10 +24,26 @@ import {
 import { supabase } from '@/lib/supabase';
 import type { RatingWithTrack, Track } from '@/types';
 
+function buildCompareMeta(rating: RatingWithTrack, low: number, high: number, listLength: number): string {
+  const rank = rating.rank_position;
+  const score = Number(rating.score).toFixed(1);
+  const rangeSpan = high - low;
+
+  if (listLength <= 1) {
+    return `Currently #${rank} · Rated ${score}`;
+  }
+
+  if (rangeSpan <= 2) {
+    return `Closest match · #${rank} · ${score}`;
+  }
+
+  return `Currently #${rank} · Rated ${score}`;
+}
+
 export default function CompareScreen() {
   const { trackId } = useLocalSearchParams<{ trackId: string }>();
   const colorScheme = useColorScheme() ?? 'light';
-  const { colors } = getTheme(colorScheme);
+  const { colors, spacing } = getTheme(colorScheme);
   const { user } = useAuth();
   const router = useRouter();
   const { isActive, getProgress, advanceToNext, clearQueue } = useImportQueue();
@@ -40,6 +59,7 @@ export default function CompareScreen() {
   >([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const handleQueueAdvance = useCallback(
     async (ratingId: string) => {
@@ -61,42 +81,43 @@ export default function CompareScreen() {
     [user, isActive, advanceToNext, clearQueue, router],
   );
 
-  useEffect(() => {
-    async function load() {
-      if (!user || !trackId) return;
+  const loadData = useCallback(async () => {
+    if (!user || !trackId) return;
 
-      setLoading(true);
-      setComparisonsMade(0);
-      setComparisonLog([]);
-      setLow(0);
+    setLoading(true);
+    setLoadError(null);
+    setComparisonsMade(0);
+    setComparisonLog([]);
+    setLow(0);
 
-      try {
-        const [{ data: track, error: trackError }, ratings] = await Promise.all([
-          supabase.from('tracks').select('*').eq('spotify_id', trackId).single(),
-          fetchRankedRatings(user.id),
-        ]);
+    try {
+      const [{ data: track, error: trackError }, ratings] = await Promise.all([
+        supabase.from('tracks').select('*').eq('spotify_id', trackId).single(),
+        fetchRankedRatings(user.id),
+      ]);
 
-        if (trackError) throw trackError;
-        setNewTrack(track as Track);
-        setRankedList(ratings);
-        setHigh(ratings.length);
+      if (trackError) throw trackError;
+      setNewTrack(track as Track);
+      setRankedList(ratings);
+      setHigh(ratings.length);
 
-        if (ratings.length === 0) {
-          setSubmitting(true);
-          const ratingId = await insertFirstRating(user.id, trackId);
-          await handleQueueAdvance(ratingId);
-        }
-      } catch (error) {
-        Alert.alert('Error', error instanceof Error ? error.message : 'Failed to load');
-        router.back();
-      } finally {
-        setLoading(false);
-        setSubmitting(false);
+      if (ratings.length === 0) {
+        setSubmitting(true);
+        const ratingId = await insertFirstRating(user.id, trackId);
+        await handleQueueAdvance(ratingId);
       }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load';
+      setLoadError(message);
+    } finally {
+      setLoading(false);
+      setSubmitting(false);
     }
+  }, [user, trackId, handleQueueAdvance]);
 
-    load();
-  }, [user, trackId, router, handleQueueAdvance]);
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const finishComparison = useCallback(
     async (
@@ -122,11 +143,11 @@ export default function CompareScreen() {
       if (!newTrack) return;
 
       const mid = getComparisonIndex(low, high);
-      const compareTrack = rankedList[mid];
+      const compareRating = rankedList[mid];
 
       const newComparison = {
-        comparedTrackId: compareTrack.track.spotify_id,
-        preferredTrackId: preferNew ? newTrack.spotify_id : compareTrack.track.spotify_id,
+        comparedTrackId: compareRating.track.spotify_id,
+        preferredTrackId: preferNew ? newTrack.spotify_id : compareRating.track.spotify_id,
       };
       const updatedLog = [...comparisonLog, newComparison];
 
@@ -144,8 +165,48 @@ export default function CompareScreen() {
     [newTrack, rankedList, low, high, comparisonLog, finishComparison],
   );
 
-  if (loading || submitting) {
-    return <LoadingState message={submitting ? 'Saving your ranking...' : undefined} />;
+  const estimatedTotal = estimateComparisonCount(rankedList.length);
+  const placement = useMemo(
+    () => estimatePlacement(low, high, rankedList.length, comparisonsMade),
+    [low, high, rankedList.length, comparisonsMade],
+  );
+
+  if (loadError) {
+    return (
+      <Screen contentStyle={styles.centered}>
+        <Text variant="heading" style={styles.errorTitle}>
+          Couldn't load this comparison
+        </Text>
+        <Text variant="bodySmall" tone="secondary" style={styles.errorBody}>
+          {loadError}
+        </Text>
+        <Button title="Try again" onPress={loadData} />
+        <Button title="Go back" variant="ghost" onPress={() => router.back()} />
+      </Screen>
+    );
+  }
+
+  if (loading) {
+    return (
+      <Screen contentStyle={styles.container}>
+        <View style={styles.header}>
+          <View style={[styles.skelLine, { backgroundColor: colors.surfaceMuted, width: 180 }]} />
+          <View style={[styles.skelLine, { backgroundColor: colors.surfaceMuted, width: '100%' }]} />
+        </View>
+        <ComparisonSkeleton />
+      </Screen>
+    );
+  }
+
+  if (submitting) {
+    return (
+      <Screen contentStyle={styles.centered}>
+        <Text variant="heading">Placing your song…</Text>
+        <Text variant="bodySmall" tone="secondary">
+          Updating your ranking
+        </Text>
+      </Screen>
+    );
   }
 
   if (!newTrack || rankedList.length === 0) {
@@ -153,32 +214,42 @@ export default function CompareScreen() {
   }
 
   const mid = getComparisonIndex(low, high);
-  const compareTrack = rankedList[mid];
-  const estimatedTotal = estimateComparisonCount(rankedList.length);
+  const compareRating = rankedList[mid];
+  const compareMeta = buildCompareMeta(compareRating, low, high, rankedList.length);
+  const queueLabel = isActive
+    ? `Ranking song ${queueProgress.current} of ${queueProgress.total}`
+    : null;
 
   return (
     <Screen contentStyle={styles.container}>
       <View style={styles.header}>
-        {isActive ? (
-          <Text
-            style={[
-              styles.queueProgress,
-              { color: colors.accent, backgroundColor: colors.accentSoft },
-            ]}>
-            Ranking song {queueProgress.current} of {queueProgress.total}
-          </Text>
-        ) : null}
-        <Text variant="bodySmall" tone="secondary" style={styles.progress}>
-          {comparisonsMade + 1} of ~{estimatedTotal} comparisons
-        </Text>
+        <ComparisonProgress
+          current={comparisonsMade + 1}
+          total={estimatedTotal}
+          queueLabel={queueLabel}
+        />
         <Text variant="title" style={styles.prompt}>
-          Which do you prefer?
+          Which song deserves the higher spot?
         </Text>
+        <View style={[styles.estimateRow, { backgroundColor: colors.surfaceMuted, borderRadius: 12 }]}>
+          <Text variant="caption" tone="secondary">
+            Estimated rating{' '}
+            <Text variant="label">{placement.estimatedScore.toFixed(1)}</Text>
+            {' · '}
+            Likely near <Text variant="label">#{placement.estimatedRank}</Text>
+            {' · '}
+            <Text variant="caption" tone="tertiary">
+              {placement.confidence}% confidence
+            </Text>
+          </Text>
+        </View>
       </View>
 
       <ComparisonPair
+        key={`${compareRating.track.spotify_id}-${comparisonsMade}`}
         newTrack={newTrack}
-        compareTrack={compareTrack.track}
+        compareTrack={compareRating.track}
+        compareMeta={compareMeta}
         onPreferNew={() => handleChoice(true)}
         onPreferCompare={() => handleChoice(false)}
       />
@@ -189,23 +260,42 @@ export default function CompareScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  header: {
-    paddingTop: 8,
     gap: 8,
   },
-  queueProgress: {
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    padding: 24,
+  },
+  header: {
+    gap: 14,
+    paddingTop: 4,
+    paddingBottom: 8,
+  },
+  prompt: {
+    textAlign: 'center',
+    fontSize: 22,
+    lineHeight: 28,
+    letterSpacing: -0.3,
+  },
+  estimateRow: {
     alignSelf: 'center',
-    borderRadius: 999,
-    fontSize: 15,
-    fontWeight: '800',
-    overflow: 'hidden',
     paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingVertical: 8,
+    maxWidth: 520,
+  },
+  errorTitle: {
     textAlign: 'center',
   },
-  progress: {
+  errorBody: {
     textAlign: 'center',
+    marginBottom: 8,
   },
-  prompt: { textAlign: 'center' },
+  skelLine: {
+    height: 12,
+    borderRadius: 6,
+    alignSelf: 'center',
+  },
 });

@@ -170,11 +170,11 @@ function RootLayoutNav() {
               options={{
                 title: 'Rank this song',
                 presentation: 'modal',
-                headerLargeTitle: true,
+                headerLargeTitle: false,
                 headerShadowVisible: false,
                 headerStyle: { backgroundColor: colors.background },
                 headerTintColor: colors.text,
-                headerTitleStyle: { fontWeight: '700' },
+                headerTitleStyle: { fontWeight: '600', fontSize: 17 },
               }}
             />
             <Stack.Screen

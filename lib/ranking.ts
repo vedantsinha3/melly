@@ -21,6 +21,22 @@ export function estimateComparisonCount(listLength: number): number {
   return Math.ceil(Math.log2(listLength + 1));
 }
 
+export function estimatePlacement(
+  low: number,
+  high: number,
+  listLength: number,
+  comparisonsMade: number,
+): { estimatedRank: number; estimatedScore: number; confidence: number } {
+  const estimatedIndex = getComparisonIndex(low, high);
+  const estimatedRank = estimatedIndex + 1;
+  const totalAfter = listLength + 1;
+  const estimatedScore = scoreForRank(estimatedRank, totalAfter);
+  const remainingRange = Math.max(high - low, 1);
+  const narrowed = 1 - remainingRange / Math.max(listLength, 1);
+  const confidence = Math.round(Math.min(92, Math.max(18, narrowed * 68 + comparisonsMade * 14)));
+  return { estimatedRank, estimatedScore, confidence };
+}
+
 export function applyComparison(
   low: number,
   high: number,

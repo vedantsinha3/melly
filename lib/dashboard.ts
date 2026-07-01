@@ -1,4 +1,9 @@
 import type { RatingWithTrack } from '@/types';
+import {
+  buildTasteProfileAnalytics,
+  type HistogramBucket,
+  type TasteProfileModule,
+} from '@/lib/scoreHistogram';
 
 type QueueProgress = {
   isActive: boolean;
@@ -22,7 +27,8 @@ export type DashboardViewModel = {
       artworkUrl: string | null;
     }>;
     topArtistByScore: { name: string; average: number } | null;
-    scoreBuckets: Array<{ label: string; count: number }>;
+    scoreHistogram: HistogramBucket[];
+    profile: TasteProfileModule | null;
   };
   recentActivity: {
     items: Array<{
@@ -41,11 +47,6 @@ export type DashboardViewModel = {
   };
 };
 
-const SCORE_BUCKETS = [
-  { key: '9-10', min: 9, max: 10 },
-  { key: '7-8.9', min: 7, max: 8.99 },
-  { key: '<7', min: 0, max: 6.99 },
-] as const;
 
 function clampPercent(value: number) {
   return Math.max(0, Math.min(100, Math.round(value)));
@@ -106,11 +107,8 @@ export function buildDashboardViewModel(
     .filter(([, value]) => value.count >= 2)
     .sort((a, b) => b[1].total / b[1].count - a[1].total / a[1].count)[0];
 
-  const scoreBuckets = SCORE_BUCKETS.map((bucket) => ({
-    label: bucket.key,
-    count: ratings.filter((rating) => Number(rating.score) >= bucket.min && Number(rating.score) <= bucket.max)
-      .length,
-  }));
+  const topArtistSongCount = topArtists[0]?.count ?? 0;
+  const tasteAnalytics = buildTasteProfileAnalytics(ratings, artistCount.size, topArtistSongCount);
 
   const withNotes = ratings.filter((rating) => Boolean(rating.notes?.trim())).length;
   const withPreview = ratings.filter((rating) => Boolean(rating.track.preview_url)).length;
@@ -133,7 +131,8 @@ export function buildDashboardViewModel(
             average: Number((topArtistByScore[1].total / topArtistByScore[1].count).toFixed(1)),
           }
         : null,
-      scoreBuckets,
+      scoreHistogram: tasteAnalytics.histogram,
+      profile: tasteAnalytics.profile,
     },
     recentActivity: {
       items: recentByDate.map((rating) => ({
