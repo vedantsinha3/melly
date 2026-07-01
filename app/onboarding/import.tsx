@@ -1,61 +1,111 @@
 import { Image } from 'expo-image';
+import { SymbolView } from 'expo-symbols';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
+  Pressable,
+  ScrollView,
   StyleSheet,
+  useWindowDimensions,
   View,
 } from 'react-native';
 
+import { ImportPathCard, OnboardingUnlocks } from '@/components/onboarding';
+import { ArtworkPreviewStack } from '@/components/onboarding/ArtworkPreviewStack';
 import { useAuth } from '@/contexts/AuthContext';
 import { useImportQueue } from '@/contexts/ImportQueueContext';
-import { Button, Card, Screen, SectionHeader, Text } from '@/components/ui';
-import { getTheme } from '@/constants/theme';
+import { Button, Card, Screen, Text } from '@/components/ui';
+import { getTheme, layout } from '@/constants/theme';
 import { useColorScheme } from '@/components/useColorScheme';
+import {
+  estimateRankingMinutes,
+  formatSongCount,
+  IMPORT_PATHS,
+  ONBOARDING_BENEFITS,
+} from '@/lib/onboarding';
 import { markOnboardingCompleted } from '@/lib/profile';
 import { hasExistingRating } from '@/lib/ranking';
 import { getUserTopTracks, spotifyTrackToTrack, upsertTrack } from '@/lib/spotify';
 import type { SpotifySearchTrack, TopTracksTimeRange } from '@/types';
 
-const TIME_RANGE_OPTIONS: {
-  value: TopTracksTimeRange;
-  label: string;
-  description: string;
-}[] = [
-  { value: 'short_term', label: '~1 month', description: 'Your top tracks from the past 4 weeks' },
-  { value: 'medium_term', label: '~6 months', description: 'Your top tracks from the past 6 months' },
-];
+function artworkUrlsFromTracks(tracks: SpotifySearchTrack[]): string[] {
+  return tracks
+    .map((track) => track.album.images[0]?.url)
+    .filter((url): url is string => Boolean(url));
+}
 
 export default function ImportOnboardingScreen() {
   const colorScheme = useColorScheme() ?? 'light';
-  const { colors, spacing, elevation } = getTheme(colorScheme);
+  const { colors, spacing, radius } = getTheme(colorScheme);
+  const { width } = useWindowDimensions();
+  const isWide = width >= layout.breakpointWide;
   const router = useRouter();
   const { user, getSpotifyAccessToken, signOut } = useAuth();
   const { startQueue } = useImportQueue();
 
+  const [previewArt, setPreviewArt] = useState<Record<TopTracksTimeRange, string[]>>({
+    short_term: [],
+    medium_term: [],
+  });
+  const [previewLoading, setPreviewLoading] = useState(true);
   const [selectedRange, setSelectedRange] = useState<TopTracksTimeRange | null>(null);
   const [tracks, setTracks] = useState<SpotifySearchTrack[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loadingRange, setLoadingRange] = useState<TopTracksTimeRange | null>(null);
   const [starting, setStarting] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const loadPreviews = useCallback(async () => {
+    if (!user) return;
+
+    setPreviewLoading(true);
+    try {
+      const accessToken = await getSpotifyAccessToken();
+      if (!accessToken) {
+        setErrorMessage('Spotify did not return an access token. Sign out and sign in with Spotify again.');
+        return;
+      }
+
+      const [shortTerm, mediumTerm] = await Promise.all([
+        getUserTopTracks(accessToken, 'short_term', 5),
+        getUserTopTracks(accessToken, 'medium_term', 5),
+      ]);
+
+      setPreviewArt({
+        short_term: artworkUrlsFromTracks(shortTerm),
+        medium_term: artworkUrlsFromTracks(mediumTerm),
+      });
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, [user, getSpotifyAccessToken]);
+
+  useEffect(() => {
+    loadPreviews();
+  }, [loadPreviews]);
+
+  const rankingMinutes = useMemo(
+    () => (tracks.length > 0 ? estimateRankingMinutes(tracks.length) : null),
+    [tracks.length],
+  );
 
   const handleFetchTracks = async (timeRange: TopTracksTimeRange) => {
     if (!user) return;
 
     setSelectedRange(timeRange);
-    setLoading(true);
+    setLoadingRange(timeRange);
     setTracks([]);
     setErrorMessage(null);
-    setStatusMessage('Fetching your Spotify top tracks...');
+    setStatusMessage(null);
 
     try {
       const accessToken = await getSpotifyAccessToken();
       if (!accessToken) {
         setErrorMessage('Spotify did not return an access token. Sign out and sign in with Spotify again.');
-        setStatusMessage(null);
         return;
       }
 
@@ -70,22 +120,34 @@ export default function ImportOnboardingScreen() {
       }
 
       setTracks(unrated);
+      setPreviewArt((current) => ({
+        ...current,
+        [timeRange]: artworkUrlsFromTracks(unrated.slice(0, 5)),
+      }));
 
       if (unrated.length === 0) {
         setStatusMessage(
           topTracks.length === 0
-            ? 'Spotify did not return any top tracks for this range yet. Try the other range or add songs manually.'
-            : 'All your top tracks from this range are already in your ranked list.',
+            ? 'Spotify has no top tracks for this period yet. Try the other option or search manually.'
+            : 'You have already ranked every song from this period — nice work!',
         );
-      } else {
-        setStatusMessage(null);
       }
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Could not fetch tracks');
-      setStatusMessage(null);
     } finally {
-      setLoading(false);
+      setLoadingRange(null);
     }
+  };
+
+  const handlePathAction = async (timeRange: TopTracksTimeRange) => {
+    if (loadingRange) return;
+
+    if (selectedRange === timeRange && tracks.length > 0) {
+      await handleStartRanking();
+      return;
+    }
+
+    await handleFetchTracks(timeRange);
   };
 
   const handleStartRanking = async () => {
@@ -97,7 +159,7 @@ export default function ImportOnboardingScreen() {
         await upsertTrack(spotifyTrackToTrack(track));
       }
 
-      const trackIds = tracks.map((t) => t.id);
+      const trackIds = tracks.map((track) => track.id);
       startQueue(trackIds);
       router.replace(`/compare/${trackIds[0]}`);
     } catch (error) {
@@ -106,58 +168,111 @@ export default function ImportOnboardingScreen() {
     }
   };
 
-  const handleSkip = async () => {
+  const handleManualSearch = async () => {
     if (!user) return;
 
     try {
       await markOnboardingCompleted(user.id);
-      router.replace('/(tabs)');
+      router.replace('/(tabs)/search');
     } catch (error) {
-      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to skip onboarding');
+      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to continue');
     }
   };
 
   return (
-    <Screen contentStyle={styles.content}>
-      <SectionHeader
-        title="Get started fast"
-        subtitle="Import your most-played Spotify tracks and rank them one by one."
-      />
+    <Screen scroll edgeToEdge wide contentStyle={styles.content}>
+      <View style={[styles.hero, { gap: spacing.md, marginBottom: spacing.lg }]}>
+        <View style={[styles.heroBadge, { backgroundColor: colors.accentSoft, borderRadius: radius.pill }]}>
+          <SymbolView
+            name={{ ios: 'music.note', android: 'music_note', web: 'music_note' }}
+            tintColor={colors.accent}
+            size={14}
+          />
+          <Text variant="overline" tone="accent">
+            Your journey starts here
+          </Text>
+        </View>
 
-      <View style={styles.rangeRow}>
-        {TIME_RANGE_OPTIONS.map((option) => {
-          const isSelected = selectedRange === option.value;
-          return (
-            <Button
-              key={option.value}
-              onPress={() => handleFetchTracks(option.value)}
-              disabled={loading}
-              variant={isSelected ? 'primary' : 'secondary'}
-              title={option.label}
-              style={styles.rangeCard}
-            />
-          );
-        })}
-      </View>
-      {selectedRange ? (
-        <Text variant="caption" tone="secondary" style={styles.rangeDescription}>
-          {TIME_RANGE_OPTIONS.find((item) => item.value === selectedRange)?.description}
+        <Text variant="display" style={styles.headline}>
+          Build your Taste Profile
         </Text>
+        <Text variant="body" tone="secondary" style={styles.subhead}>
+          Rank the songs you already love. Melly learns your taste with every pick — no star ratings, just
+          honest comparisons.
+        </Text>
+
+        <View style={[styles.benefitsRow, { gap: spacing.sm }]}>
+          {ONBOARDING_BENEFITS.map((benefit) => (
+            <View
+              key={benefit}
+              style={[
+                styles.benefitPill,
+                {
+                  backgroundColor: colors.surface,
+                  borderRadius: radius.pill,
+                  borderColor: colors.border,
+                },
+              ]}>
+              <SymbolView
+                name={{ ios: 'checkmark.circle.fill', android: 'check_circle', web: 'check_circle' }}
+                tintColor={colors.accent}
+                size={12}
+              />
+              <Text variant="caption" style={styles.benefitText}>
+                {benefit}
+              </Text>
+            </View>
+          ))}
+        </View>
+      </View>
+
+      <View style={[styles.section, { gap: spacing.sm, marginBottom: spacing.lg }]}>
+        <Text variant="heading">Start with the songs you love</Text>
+        <Text variant="bodySmall" tone="secondary">
+          Pick a listening window. We will pull your Spotify favorites and guide you through quick head-to-head
+          rankings.
+        </Text>
+      </View>
+
+      {previewLoading ? (
+        <View style={styles.previewLoader}>
+          <ActivityIndicator color={colors.accent} />
+          <Text variant="caption" tone="tertiary">
+            Pulling album art from your Spotify…
+          </Text>
+        </View>
       ) : null}
 
-      {loading ? (
-        <ActivityIndicator style={styles.loader} color={colors.tint} />
-      ) : null}
+      <View style={[isWide ? styles.cardRow : styles.cardStack, { gap: spacing.md, marginBottom: spacing.lg }]}>
+        {IMPORT_PATHS.map((path) => (
+          <ImportPathCard
+            key={path.value}
+            config={path}
+            artworkUrls={previewArt[path.value]}
+            selected={selectedRange === path.value}
+            loading={loadingRange === path.value}
+            songCount={selectedRange === path.value ? tracks.length : null}
+            rankingMinutes={selectedRange === path.value ? rankingMinutes : null}
+            onSelect={() => void handlePathAction(path.value)}
+          />
+        ))}
+      </View>
 
       {statusMessage ? (
-        <Text style={[styles.statusText, { color: colors.textSecondary }]}>
-          {statusMessage}
-        </Text>
+        <Card tone="muted" style={{ marginBottom: spacing.md, gap: spacing.xs }}>
+          <Text variant="label">{statusMessage}</Text>
+        </Card>
       ) : null}
 
       {errorMessage ? (
-        <Card style={[styles.messageBox, { borderColor: colors.error, boxShadow: 'none', elevation: 0 }]}>
-          <Text variant="label" tone="error">Import failed</Text>
+        <Card
+          style={[
+            styles.messageBox,
+            { marginBottom: spacing.md, borderColor: colors.error, gap: spacing.sm },
+          ]}>
+          <Text variant="label" tone="error">
+            Could not load your songs
+          </Text>
           <Text variant="bodySmall" tone="secondary">
             {errorMessage}
           </Text>
@@ -167,113 +282,151 @@ export default function ImportOnboardingScreen() {
         </Card>
       ) : null}
 
-      {!loading && tracks.length > 0 ? (
-        <>
-          <Text variant="heading">
-            {tracks.length} songs to rank
-          </Text>
-          <Text variant="bodySmall" tone="secondary">
-            About 3–5 comparisons per song
-          </Text>
-          <FlatList
-            data={tracks}
-            keyExtractor={(item) => item.id}
-            style={styles.list}
-            renderItem={({ item, index }) => (
-              <View style={[styles.trackRow, { borderBottomColor: colors.border }]}>
-                <Text style={[styles.trackIndex, { color: colors.textSecondary }]}>
-                  {index + 1}
-                </Text>
+      {selectedRange && tracks.length > 0 ? (
+        <Card elevated style={[styles.readyPanel, { marginBottom: spacing.xl, gap: spacing.md }]}>
+          <View style={styles.readyHeader}>
+            <View style={{ flex: 1, gap: 4 }}>
+              <Text variant="heading">Ready to rank {formatSongCount(tracks.length)}</Text>
+              <Text variant="bodySmall" tone="secondary">
+                About 3–5 quick comparisons per song · {rankingMinutes ?? 'a few minutes'} total
+              </Text>
+            </View>
+            <ArtworkPreviewStack urls={artworkUrlsFromTracks(tracks)} size={36} />
+          </View>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: spacing.sm }}>
+            {tracks.slice(0, 8).map((track) => (
+              <View key={track.id} style={[styles.previewTile, { borderRadius: radius.md }]}>
                 <Image
-                  source={{ uri: item.album.images[0]?.url }}
-                  style={styles.artwork}
+                  source={{ uri: track.album.images[0]?.url }}
+                  style={[styles.previewArt, { borderRadius: radius.md }]}
                   contentFit="cover"
                 />
-                <View style={styles.trackInfo}>
-                  <Text style={[styles.trackName, { color: colors.text }]} numberOfLines={1}>
-                    {item.name}
-                  </Text>
-                  <Text style={[styles.trackArtist, { color: colors.textSecondary }]} numberOfLines={1}>
-                    {item.artists.map((a) => a.name).join(', ')}
-                  </Text>
-                </View>
+                <Text variant="caption" numberOfLines={1} style={styles.previewTitle}>
+                  {track.name}
+                </Text>
               </View>
-            )}
-          />
-          <Button title="Start ranking" onPress={handleStartRanking} loading={starting} />
-        </>
+            ))}
+          </ScrollView>
+
+          <Button title="Start ranking" onPress={() => void handleStartRanking()} loading={starting} />
+        </Card>
       ) : null}
 
-      <Button title="I&apos;ll add songs manually" variant="ghost" onPress={handleSkip} />
+      <OnboardingUnlocks />
+
+      <View style={[styles.dividerRow, { marginVertical: spacing.xl, gap: spacing.md }]}>
+        <View style={[styles.dividerLine, { backgroundColor: colors.separator }]} />
+        <Text variant="caption" tone="tertiary">
+          Or search Spotify manually
+        </Text>
+        <View style={[styles.dividerLine, { backgroundColor: colors.separator }]} />
+      </View>
+
+      <Pressable
+        onPress={() => void handleManualSearch()}
+        style={({ pressed }) => [
+          styles.manualLink,
+          {
+            opacity: pressed ? 0.7 : 1,
+            marginBottom: spacing['2xl'],
+          },
+        ]}
+        accessibilityRole="button">
+        <Text variant="label" tone="accent">
+          Skip import and search songs
+        </Text>
+      </Pressable>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   content: {
-    flex: 1,
-    width: '100%',
-    maxWidth: 980,
-    alignSelf: 'center',
+    paddingTop: 8,
+    paddingBottom: 24,
   },
-  rangeRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 16,
-  },
-  rangeCard: {
-    flex: 1,
-    minHeight: 56,
-  },
-  rangeDescription: {
-    marginTop: -8,
-    marginBottom: 8,
-  },
-  loader: {
-    marginTop: 24,
-  },
-  statusText: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  messageBox: {
-    marginTop: 12,
-    gap: 6,
-  },
-  list: {
-    flex: 1,
-    marginBottom: 12,
-  },
-  trackRow: {
+  hero: {},
+  heroBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    alignSelf: 'flex-start',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  headline: {
+    maxWidth: 520,
+  },
+  subhead: {
+    maxWidth: 560,
+    lineHeight: 22,
+  },
+  benefitsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 4,
+  },
+  benefitPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  benefitText: {
+    fontWeight: '500',
+  },
+  section: {},
+  previewLoader: {
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 16,
+  },
+  cardRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  cardStack: {
+    flexDirection: 'column',
+  },
+  messageBox: {
+    borderWidth: 1,
+  },
+  readyPanel: {
+    borderCurve: 'continuous',
+  },
+  readyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
   },
-  trackIndex: {
-    width: 24,
-    textAlign: 'center',
-    fontSize: 14,
-    fontWeight: '600',
+  previewTile: {
+    width: 88,
+    gap: 6,
   },
-  artwork: {
-    width: 44,
-    height: 44,
-    borderRadius: 6,
-    backgroundColor: '#333',
+  previewArt: {
+    width: 88,
+    height: 88,
+    backgroundColor: '#1a1a1a',
+    borderCurve: 'continuous',
   },
-  trackInfo: {
+  previewTitle: {
+    fontWeight: '500',
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  dividerLine: {
     flex: 1,
-    gap: 2,
+    height: StyleSheet.hairlineWidth,
   },
-  trackName: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  trackArtist: {
-    fontSize: 13,
+  manualLink: {
+    alignSelf: 'center',
   },
 });
