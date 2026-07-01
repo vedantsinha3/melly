@@ -1,7 +1,6 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import {
-    FlatList,
     RefreshControl,
     ScrollView,
     StyleSheet,
@@ -16,7 +15,6 @@ import {
     DashboardScoreChart,
     DashboardToolbar,
 } from '@/components/dashboard';
-import { RankedListItem } from '@/components/RankedListItem';
 import { EmptyState, LoadingState, Screen, Text, wideScrollContentStyle } from '@/components/ui';
 import { useColorScheme } from '@/components/useColorScheme';
 import { getTheme, layout } from '@/constants/theme';
@@ -64,7 +62,6 @@ export default function RankedListScreen() {
   const [ratings, setRatings] = useState<RatingWithTrack[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [showFullRanking, setShowFullRanking] = useState(false);
 
   const loadRatings = useCallback(async () => {
     if (!user) return;
@@ -198,8 +195,6 @@ export default function RankedListScreen() {
           displayName={displayName}
           showImport={isSpotifyUser}
           onImport={() => router.push('/onboarding/import')}
-          onViewRanking={ratings.length > 0 ? () => setShowFullRanking((prev) => !prev) : undefined}
-          showFullRanking={showFullRanking}
           showSignOut={!isWide}
           onSignOut={requestSignOut}
         />
@@ -224,25 +219,6 @@ export default function RankedListScreen() {
             {heroBlock}
             {artistsBlock}
             {insightsBlock}
-
-            {showFullRanking ? (
-              <View style={[styles.listSection, { gap: spacing.sm, marginTop: spacing.xs }]}>
-                <Text variant="heading">Full ranking</Text>
-                <FlatList
-                  data={ratings}
-                  keyExtractor={(item) => item.id}
-                  scrollEnabled={false}
-                  contentContainerStyle={{ gap: spacing.sm }}
-                  renderItem={({ item }) => (
-                    <RankedListItem
-                      rating={item}
-                      highlighted={item.id === highlight}
-                      onPress={() => router.push(`/song/${item.id}`)}
-                    />
-                  )}
-                />
-              </View>
-            ) : null}
           </>
         )}
       </ScrollView>
@@ -274,5 +250,4 @@ const styles = StyleSheet.create({
     flex: 0.6,
     minWidth: 0,
   },
-  listSection: {},
 });

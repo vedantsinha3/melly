@@ -73,6 +73,20 @@ export default function TabLayout() {
               ),
             }}
           />
+          <Tabs.Screen
+            name="library"
+            options={{
+              title: 'Library',
+              headerShown: false,
+              tabBarIcon: ({ color }) => (
+                <SymbolView
+                  name={{ ios: 'music.note.list', android: 'library_music', web: 'library_music' }}
+                  tintColor={color}
+                  size={22}
+                />
+              ),
+            }}
+          />
         </Tabs>
       </View>
     </View>

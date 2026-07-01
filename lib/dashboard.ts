@@ -86,7 +86,7 @@ export function buildDashboardViewModel(
     }
   }
 
-  const perfectScores = ratings.filter((rating) => Number(rating.score) >= 10).length;
+  const perfectScores = ratings.filter((rating) => Number(rating.score) >= 9.95).length;
 
   const topArtists = [...artistCount.entries()]
     .sort((a, b) => b[1] - a[1])

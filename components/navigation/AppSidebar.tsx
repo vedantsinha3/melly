@@ -30,13 +30,22 @@ const NAV_ITEMS = [
     href: '/(tabs)/search' as const,
     icon: { ios: 'plus', android: 'add', web: 'add' } as const,
   },
+  {
+    key: 'library',
+    label: 'Library',
+    href: '/(tabs)/library' as const,
+    icon: { ios: 'music.note.list', android: 'library_music', web: 'library_music' } as const,
+  },
 ] as const;
 
 function isActiveRoute(pathname: string, href: string) {
   if (href === '/(tabs)') {
     return pathname === '/' || pathname.endsWith('/index') || pathname === '/(tabs)';
   }
-  return pathname.includes('/search');
+  if (href === '/(tabs)/search') {
+    return pathname.includes('/search');
+  }
+  return pathname.includes('/library');
 }
 
 type Props = {

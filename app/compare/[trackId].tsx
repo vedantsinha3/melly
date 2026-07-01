@@ -15,6 +15,7 @@ import { buildPlacementSearchSteps } from '@/lib/comparisonPlacement';
 import { markOnboardingCompleted } from '@/lib/profile';
 import {
   applyComparison,
+  calculateScoreForInsertion,
   estimateComparisonCount,
   estimatePlacement,
   fetchRankedRatings,
@@ -22,7 +23,6 @@ import {
   getComparisonIndex,
   insertFirstRating,
   isComparisonComplete,
-  scoreForRank,
 } from '@/lib/ranking';
 import { supabase } from '@/lib/supabase';
 import type { RatingWithTrack, Track } from '@/types';
@@ -151,7 +151,7 @@ export default function CompareScreen() {
       if (!user || !trackId || !newTrack) return;
 
       const rank = insertionIndex + 1;
-      const score = scoreForRank(rank, rankedList.length + 1);
+      const score = calculateScoreForInsertion(rankedList, insertionIndex);
       const searchSteps = buildPlacementSearchSteps(rankedList, comparisons, newTrack.spotify_id);
 
       setPlacementContext({
@@ -212,8 +212,8 @@ export default function CompareScreen() {
 
   const estimatedTotal = estimateComparisonCount(rankedList.length);
   const placement = useMemo(
-    () => estimatePlacement(low, high, rankedList.length, comparisonsMade),
-    [low, high, rankedList.length, comparisonsMade],
+    () => estimatePlacement(low, high, rankedList, comparisonsMade),
+    [low, high, rankedList, comparisonsMade],
   );
 
   if (loadError) {
@@ -286,7 +286,7 @@ export default function CompareScreen() {
           </Text>
           <View style={[styles.estimateRow, { backgroundColor: colors.surfaceMuted, borderRadius: 12 }]}>
             <Text variant="caption" tone="secondary">
-              Estimated rating{' '}
+              Estimated score{' '}
               <Text variant="label">{placement.estimatedScore.toFixed(1)}</Text>
               {' · '}
               Likely near <Text variant="label">#{placement.estimatedRank}</Text>

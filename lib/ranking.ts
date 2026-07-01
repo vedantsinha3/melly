@@ -2,10 +2,80 @@ import { supabase } from './supabase';
 import type { RatingWithTrack } from '@/types';
 
 export const DEFAULT_FIRST_SCORE = 7.0;
+const NEIGHBOR_STEP = 0.2;
+const LEGACY_MIGRATION_MIN_SIZE = 6;
+const LEGACY_MATCH_THRESHOLD = 0.02;
 
 export function scoreForRank(rankPosition: number, totalCount: number): number {
   if (totalCount <= 1) return DEFAULT_FIRST_SCORE;
   return Math.round((1 + (9 * (totalCount - rankPosition)) / (totalCount - 1)) * 10) / 10;
+}
+
+function clampScore(value: number): number {
+  return Math.max(1, Math.min(10, Number(value.toFixed(1))));
+}
+
+function legacyCurveScore(rankPosition: number, totalCount: number): number {
+  if (totalCount <= 1) return DEFAULT_FIRST_SCORE;
+  const normalized = 1 - (rankPosition - 1) / Math.max(totalCount - 1, 1);
+  const curved = 3 + 7 * Math.pow(normalized, 0.78);
+  return clampScore(Math.round(curved * 5) / 5);
+}
+
+function isLikelyLegacyRankBased(ratings: Array<{ rank_position: number; score: number }>): boolean {
+  if (ratings.length < LEGACY_MIGRATION_MIN_SIZE) return false;
+
+  const total = ratings.length;
+  let matched = 0;
+  for (const rating of ratings) {
+    const expected = scoreForRank(rating.rank_position, total);
+    if (Math.abs(Number(rating.score) - expected) <= LEGACY_MATCH_THRESHOLD) {
+      matched += 1;
+    }
+  }
+
+  return matched / total >= 0.95;
+}
+
+async function migrateLegacyRankScoresIfNeeded(
+  userId: string,
+  ratings: Array<{ id: string; rank_position: number; score: number }>,
+): Promise<void> {
+  if (!isLikelyLegacyRankBased(ratings)) return;
+
+  for (const rating of ratings) {
+    const nextScore = legacyCurveScore(rating.rank_position, ratings.length);
+    const { error } = await supabase.from('ratings').update({ score: nextScore }).eq('id', rating.id);
+    if (error) throw error;
+  }
+}
+
+export function calculateScoreForInsertion(
+  sortedRatings: Array<{ score: number }>,
+  insertionIndex: number,
+): number {
+  if (sortedRatings.length === 0) return DEFAULT_FIRST_SCORE;
+
+  const above = sortedRatings[insertionIndex - 1];
+  const below = sortedRatings[insertionIndex];
+  const aboveScore = above ? Number(above.score) : null;
+  const belowScore = below ? Number(below.score) : null;
+
+  if (aboveScore != null && belowScore != null) {
+    return clampScore((aboveScore + belowScore) / 2);
+  }
+
+  if (belowScore != null) {
+    if (belowScore >= 9.95) return 10;
+    return clampScore(belowScore + NEIGHBOR_STEP);
+  }
+
+  if (aboveScore != null) {
+    if (aboveScore <= 1.05) return 1;
+    return clampScore(aboveScore - NEIGHBOR_STEP);
+  }
+
+  return DEFAULT_FIRST_SCORE;
 }
 
 export function getComparisonIndex(low: number, high: number): number {
@@ -24,13 +94,13 @@ export function estimateComparisonCount(listLength: number): number {
 export function estimatePlacement(
   low: number,
   high: number,
-  listLength: number,
+  rankedList: Array<{ score: number }>,
   comparisonsMade: number,
 ): { estimatedRank: number; estimatedScore: number; confidence: number } {
+  const listLength = rankedList.length;
   const estimatedIndex = getComparisonIndex(low, high);
   const estimatedRank = estimatedIndex + 1;
-  const totalAfter = listLength + 1;
-  const estimatedScore = scoreForRank(estimatedRank, totalAfter);
+  const estimatedScore = calculateScoreForInsertion(rankedList, estimatedIndex);
   const remainingRange = Math.max(high - low, 1);
   const narrowed = 1 - remainingRange / Math.max(listLength, 1);
   const confidence = Math.round(Math.min(92, Math.max(18, narrowed * 68 + comparisonsMade * 14)));
@@ -57,7 +127,31 @@ export async function fetchRankedRatings(userId: string): Promise<RatingWithTrac
     .order('rank_position', { ascending: true });
 
   if (error) throw error;
-  return data as RatingWithTrack[];
+  const ratings = data as RatingWithTrack[];
+  const scoreSnapshot = ratings.map((r) => ({ rank_position: r.rank_position, score: Number(r.score) }));
+  const hadLegacyScores = isLikelyLegacyRankBased(scoreSnapshot);
+
+  await migrateLegacyRankScoresIfNeeded(
+    userId,
+    ratings.map((rating) => ({
+      id: rating.id,
+      rank_position: rating.rank_position,
+      score: Number(rating.score),
+    })),
+  );
+
+  if (hadLegacyScores) {
+    const { data: refreshed, error: refreshError } = await supabase
+      .from('ratings')
+      .select('*, track:tracks(*)')
+      .eq('user_id', userId)
+      .order('rank_position', { ascending: true });
+
+    if (refreshError) throw refreshError;
+    return refreshed as RatingWithTrack[];
+  }
+
+  return ratings;
 }
 
 export async function hasExistingRating(
@@ -106,13 +200,14 @@ export async function finalizeRating(
 ): Promise<string> {
   const { data: existingRatings, error: fetchError } = await supabase
     .from('ratings')
-    .select('id, rank_position')
+    .select('id, rank_position, score')
     .eq('user_id', userId)
     .order('rank_position', { ascending: true });
 
   if (fetchError) throw fetchError;
 
   const newRankPosition = insertionIndex + 1;
+  const newScore = calculateScoreForInsertion(existingRatings ?? [], insertionIndex);
 
   const toShift = (existingRatings ?? []).filter(
     (r) => r.rank_position >= newRankPosition,
@@ -133,31 +228,13 @@ export async function finalizeRating(
       user_id: userId,
       track_id: trackId,
       rank_position: newRankPosition,
-      score: 0,
+      score: newScore,
       listened_at: new Date().toISOString(),
     })
     .select('id')
     .single();
 
   if (insertError) throw insertError;
-
-  const totalCount = (existingRatings?.length ?? 0) + 1;
-  const { data: allRatings, error: allError } = await supabase
-    .from('ratings')
-    .select('id, rank_position')
-    .eq('user_id', userId)
-    .order('rank_position', { ascending: true });
-
-  if (allError) throw allError;
-
-  for (const r of allRatings ?? []) {
-    const { error } = await supabase
-      .from('ratings')
-      .update({ score: scoreForRank(r.rank_position, totalCount) })
-      .eq('id', r.id);
-
-    if (error) throw error;
-  }
 
   if (comparisons.length > 0) {
     const { error: comparisonError } = await supabase.from('comparisons').insert(
@@ -206,7 +283,6 @@ export async function deleteRating(userId: string, ratingId: string): Promise<vo
   if (remainingError) throw remainingError;
 
   const totalCount = remaining?.length ?? 0;
-
   for (let i = 0; i < totalCount; i++) {
     const r = remaining![i];
     const newPosition = i + 1;
@@ -214,7 +290,6 @@ export async function deleteRating(userId: string, ratingId: string): Promise<vo
       .from('ratings')
       .update({
         rank_position: newPosition,
-        score: scoreForRank(newPosition, totalCount),
       })
       .eq('id', r.id);
 

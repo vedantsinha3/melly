@@ -255,7 +255,7 @@ export function computeRatingStats(
       ? 0
       : scores.reduce((sum, score) => sum + (score - average) ** 2, 0) / total;
   const stdDev = Number(Math.sqrt(variance).toFixed(2));
-  const perfectScores = histogram[9]?.count ?? 0;
+  const perfectScores = scores.filter((score) => score >= 9.95).length;
   const spread = histogram.filter((bucket) => bucket.count > 0).length;
 
   return {
