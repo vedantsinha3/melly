@@ -87,8 +87,10 @@ function OnboardingGate({ children }: { children: React.ReactNode }) {
       const inOnboarding = rootSegment === 'onboarding';
       const inCompare = rootSegment === 'compare';
       const inArtist = rootSegment === 'artist';
+      const inAlbum = rootSegment === 'album';
+      const inSong = rootSegment === 'song';
 
-      if (inAuth || inOnboarding || inCompare || inArtist) {
+      if (inAuth || inOnboarding || inCompare || inArtist || inAlbum || inSong) {
         setChecking(false);
         return;
       }
@@ -167,15 +169,12 @@ function RootLayoutNav() {
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="onboarding" options={{ headerShown: false }} />
             <Stack.Screen
+              name="album/[albumName]"
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
               name="artist/[artistName]"
-              options={{
-                title: 'Artist',
-                headerLargeTitle: false,
-                headerShadowVisible: false,
-                headerStyle: { backgroundColor: colors.background },
-                headerTintColor: colors.text,
-                headerTitleStyle: { fontWeight: '600', fontSize: 17 },
-              }}
+              options={{ headerShown: false }}
             />
             <Stack.Screen
               name="compare/[trackId]"
@@ -191,14 +190,7 @@ function RootLayoutNav() {
             />
             <Stack.Screen
               name="song/[ratingId]"
-              options={{
-                title: 'Song details',
-                headerLargeTitle: false,
-                headerShadowVisible: false,
-                headerStyle: { backgroundColor: colors.background },
-                headerTintColor: colors.text,
-                headerTitleStyle: { fontWeight: '700' },
-              }}
+              options={{ headerShown: false }}
             />
           </Stack>
         </OnboardingGate>

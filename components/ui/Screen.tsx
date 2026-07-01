@@ -13,6 +13,8 @@ type Props = {
   edgeToEdge?: boolean;
   /** Wider max-width for dashboard grids. */
   wide?: boolean;
+  /** Skip SafeAreaView when an outer shell already handles insets. */
+  omitSafeArea?: boolean;
 };
 
 export function Screen({
@@ -22,6 +24,7 @@ export function Screen({
   contentStyle,
   edgeToEdge,
   wide,
+  omitSafeArea,
 }: Props) {
   const colorScheme = useColorScheme();
   const { colors, layout, spacing } = getTheme(colorScheme);
@@ -44,6 +47,19 @@ export function Screen({
   ) : (
     <View style={[shellStyle, contentStyle]}>{children}</View>
   );
+
+  if (omitSafeArea) {
+    if (keyboardAvoiding) {
+      return (
+        <KeyboardAvoidingView
+          style={[styles.flex, { backgroundColor: colors.background }]}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          {inner}
+        </KeyboardAvoidingView>
+      );
+    }
+    return <View style={[styles.flex, { backgroundColor: colors.background }]}>{inner}</View>;
+  }
 
   if (keyboardAvoiding) {
     return (

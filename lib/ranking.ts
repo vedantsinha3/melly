@@ -222,6 +222,20 @@ export async function deleteRating(userId: string, ratingId: string): Promise<vo
   }
 }
 
+export async function fetchComparisonCountForTrack(
+  userId: string,
+  trackId: string,
+): Promise<number> {
+  const { count, error } = await supabase
+    .from('comparisons')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .eq('new_track_id', trackId);
+
+  if (error) throw error;
+  return count ?? 0;
+}
+
 export async function fetchRatingById(
   userId: string,
   ratingId: string,

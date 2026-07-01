@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
+import { DetailShell } from '@/components/navigation/DetailShell';
 import {
   ArtistAlbums,
   ArtistDetailSkeleton,
@@ -73,15 +74,18 @@ export default function ArtistDetailScreen() {
 
   if (loading) {
     return (
-      <Screen edgeToEdge wide>
-        <ArtistDetailSkeleton />
-      </Screen>
+      <DetailShell title="Artist">
+        <Screen edgeToEdge wide omitSafeArea>
+          <ArtistDetailSkeleton />
+        </Screen>
+      </DetailShell>
     );
   }
 
   if (!detail) {
     return (
-      <Screen contentStyle={styles.emptyWrap}>
+      <DetailShell title="Artist">
+        <Screen contentStyle={styles.emptyWrap} omitSafeArea>
         <EmptyState
           mark="♪"
           title="No ranked songs yet"
@@ -91,12 +95,14 @@ export default function ArtistDetailScreen() {
           secondaryTitle="Back to dashboard"
           onPressSecondary={() => router.back()}
         />
-      </Screen>
+        </Screen>
+      </DetailShell>
     );
   }
 
   return (
-    <Screen scroll edgeToEdge wide contentStyle={styles.content}>
+    <DetailShell title={detail.artistName}>
+      <Screen scroll edgeToEdge wide omitSafeArea contentStyle={styles.content}>
       <Animated.View entering={FadeIn.duration(320)} style={{ gap: spacing.lg, paddingBottom: spacing['2xl'] }}>
         <ArtistHero
           artistName={detail.artistName}
@@ -146,7 +152,8 @@ export default function ArtistDetailScreen() {
           </View>
         </View>
       </Animated.View>
-    </Screen>
+      </Screen>
+    </DetailShell>
   );
 }
 
