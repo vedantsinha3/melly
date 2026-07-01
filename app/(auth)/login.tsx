@@ -9,15 +9,78 @@ import { getTheme } from '@/constants/theme';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { formatSpotifyOAuthError } from '@/lib/oauth';
 
+function AuthDivider() {
+  const colorScheme = useColorScheme() ?? 'light';
+  const { colors, spacing } = getTheme(colorScheme);
+
+  return (
+    <View style={[styles.dividerRow, { gap: spacing.md, marginVertical: spacing.xs }]}>
+      <View style={[styles.dividerLine, { backgroundColor: colors.separator }]} />
+      <Text variant="caption" tone="tertiary">
+        OR
+      </Text>
+      <View style={[styles.dividerLine, { backgroundColor: colors.separator }]} />
+    </View>
+  );
+}
+
+function LoginBackdrop() {
+  const colorScheme = useColorScheme() ?? 'light';
+  const { colors } = getTheme(colorScheme);
+
+  return (
+    <View style={styles.backdrop} pointerEvents="none">
+      <View
+        style={[
+          styles.backdropOrb,
+          styles.backdropOrbPrimary,
+          { backgroundColor: colors.accentSoft },
+        ]}
+      />
+      <View
+        style={[
+          styles.backdropOrb,
+          styles.backdropOrbSecondary,
+          { backgroundColor: colors.surfaceInset },
+        ]}
+      />
+      <View
+        style={[
+          styles.backdropTile,
+          styles.backdropTileOne,
+          { backgroundColor: colors.surfaceMuted },
+        ]}
+      />
+      <View
+        style={[
+          styles.backdropTile,
+          styles.backdropTileTwo,
+          { backgroundColor: colors.surfaceInset },
+        ]}
+      />
+      <View
+        style={[
+          styles.backdropTile,
+          styles.backdropTileThree,
+          { backgroundColor: colors.surfaceMuted },
+        ]}
+      />
+    </View>
+  );
+}
+
 export default function LoginScreen() {
   const colorScheme = useColorScheme() ?? 'light';
-  const { colors, layout, radius, spacing } = getTheme(colorScheme);
+  const { colors, layout, radius, spacing, elevation } = getTheme(colorScheme);
   const { signInWithEmail, signUpWithEmail, signInWithApple, signInWithSpotify } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [spotifyLoading, setSpotifyLoading] = useState(false);
+
+  const busy = emailLoading || spotifyLoading;
 
   const handleEmailAuth = async () => {
     if (!email || !password) {
@@ -25,7 +88,7 @@ export default function LoginScreen() {
       return;
     }
 
-    setLoading(true);
+    setEmailLoading(true);
     try {
       if (isSignUp) {
         await signUpWithEmail(email, password);
@@ -36,12 +99,12 @@ export default function LoginScreen() {
     } catch (error) {
       Alert.alert('Error', error instanceof Error ? error.message : 'Authentication failed');
     } finally {
-      setLoading(false);
+      setEmailLoading(false);
     }
   };
 
   const handleAppleAuth = async () => {
-    setLoading(true);
+    setEmailLoading(true);
     try {
       await signInWithApple();
     } catch (error) {
@@ -49,12 +112,12 @@ export default function LoginScreen() {
         Alert.alert('Error', error instanceof Error ? error.message : 'Apple Sign-In failed');
       }
     } finally {
-      setLoading(false);
+      setEmailLoading(false);
     }
   };
 
   const handleSpotifyAuth = async () => {
-    setLoading(true);
+    setSpotifyLoading(true);
     try {
       await signInWithSpotify();
     } catch (error) {
@@ -63,7 +126,7 @@ export default function LoginScreen() {
         Alert.alert('Error', formatSpotifyOAuthError(message));
       }
     } finally {
-      setLoading(false);
+      setSpotifyLoading(false);
     }
   };
 
@@ -82,129 +145,251 @@ export default function LoginScreen() {
   }
 
   return (
-    <Screen
-      keyboardAvoiding
-      contentStyle={{ ...styles.content, maxWidth: layout.compactContentWidth }}>
-      <Card style={[styles.formCard, { gap: spacing.lg }]}>
-        <View style={styles.brandRow}>
-          <View style={[styles.logoMark, { backgroundColor: colors.accentSoft }]}>
-            <Text variant="label" tone="accent">
-              M
+    <View style={[styles.page, { backgroundColor: colors.background }]}>
+      <LoginBackdrop />
+      <Screen
+        keyboardAvoiding
+        omitSafeArea
+        contentStyle={{ ...styles.content, maxWidth: layout.compactContentWidth }}>
+        <Card
+          style={[
+            styles.formCard,
+            {
+              gap: spacing.md,
+              borderRadius: radius.xl,
+              borderColor: colors.border,
+              paddingVertical: spacing['2xl'],
+              paddingHorizontal: spacing.xl,
+              ...elevation.card,
+            },
+          ]}>
+          <View style={styles.brandBlock}>
+            <View style={styles.brandRow}>
+              <View style={[styles.logoMark, { backgroundColor: colors.accent }]}>
+                <Text variant="label" style={styles.logoText}>
+                  M
+                </Text>
+              </View>
+              <Text variant="title">Melly</Text>
+            </View>
+            <Text variant="overline" tone="accent" style={styles.personality}>
+              Your taste, organized.
             </Text>
           </View>
-          <Text variant="heading">Melly</Text>
-        </View>
 
-        <Text variant="bodySmall" tone="secondary">
-          Build your personal music rankings.
-        </Text>
-        <Text variant="title">Welcome back</Text>
-
-        <View style={[styles.form, { marginTop: spacing.sm }]}>
-          <TextField
-            placeholder="Email address"
-            autoCapitalize="none"
-            keyboardType="email-address"
-            value={email}
-            onChangeText={setEmail}
-          />
-          <TextField
-            placeholder="Password"
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-          />
-        </View>
-
-        <View style={styles.rowBetween}>
-          <Pressable onPress={() => setIsSignUp(!isSignUp)}>
-            <Text variant="bodySmall" tone="secondary">
-              {isSignUp ? 'Switch to sign in' : 'Create account'}
+          <View style={styles.copyBlock}>
+            <Text variant="title" style={styles.headline}>
+              Rank the songs that define your taste.
             </Text>
-          </Pressable>
-          <Text variant="bodySmall" tone="accent">
-            Forgot password
-          </Text>
-        </View>
+            <Text variant="bodySmall" tone="secondary" style={styles.subcopy}>
+              Start building a personal map of what you love powered by Spotify.
+            </Text>
+          </View>
 
-        <Button
-          title={isSignUp ? 'Sign up' : 'Sign in'}
-          onPress={handleEmailAuth}
-          disabled={loading}
-          loading={loading}
-          style={styles.primaryButton}
-        />
-
-        <Button
-          title="Continue with Spotify"
-          onPress={handleSpotifyAuth}
-          loading={loading}
-          variant="secondary"
-          style={styles.secondaryButton}
-        />
-
-        <Text variant="bodySmall" tone="secondary" style={styles.centerText}>
-          {isSignUp ? 'Already have an account?' : "Don't have an account?"}{' '}
-          <Text variant="bodySmall" tone="accent">
-            {isSignUp ? 'Sign in' : 'Sign up'}
-          </Text>
-        </Text>
-        {Platform.OS === 'ios' ? (
-          <AppleAuthentication.AppleAuthenticationButton
-            buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-            buttonStyle={
-              colorScheme === 'dark'
-                ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
-                : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
-            }
-            cornerRadius={radius.md}
-            style={[styles.appleButton, { marginTop: spacing.xs }]}
-            onPress={handleAppleAuth}
+          <Button
+            title="Continue with Spotify"
+            onPress={handleSpotifyAuth}
+            loading={spotifyLoading}
+            disabled={busy && !spotifyLoading}
+            accessibilityLabel="Continue with Spotify"
           />
-        ) : null}
-      </Card>
-    </Screen>
+
+          <AuthDivider />
+
+          <View style={styles.form}>
+            <TextField
+              label="Email address"
+              placeholder="you@example.com"
+              autoCapitalize="none"
+              keyboardType="email-address"
+              autoComplete="email"
+              textContentType="emailAddress"
+              value={email}
+              onChangeText={setEmail}
+            />
+            <TextField
+              label="Password"
+              placeholder="Your password"
+              secureTextEntry
+              autoComplete={isSignUp ? 'new-password' : 'password'}
+              textContentType={isSignUp ? 'newPassword' : 'password'}
+              value={password}
+              onChangeText={setPassword}
+            />
+          </View>
+
+          <View style={styles.rowBetween}>
+            <Pressable
+              onPress={() => setIsSignUp(!isSignUp)}
+              accessibilityRole="button"
+              accessibilityLabel={isSignUp ? 'Switch to sign in' : 'Create account'}>
+              <Text variant="bodySmall" tone="secondary">
+                {isSignUp ? 'Sign in instead' : 'Create account'}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() =>
+                Alert.alert(
+                  'Reset password',
+                  'Password reset is coming soon. Use Spotify sign-in or contact support for now.',
+                )
+              }
+              accessibilityRole="button"
+              accessibilityLabel="Forgot password">
+              <Text variant="bodySmall" tone="accent">
+                Forgot password
+              </Text>
+            </Pressable>
+          </View>
+
+          <Button
+            title={isSignUp ? 'Create account' : 'Sign in'}
+            onPress={handleEmailAuth}
+            disabled={busy && !emailLoading}
+            loading={emailLoading}
+            variant="secondary"
+          />
+
+          {Platform.OS === 'ios' ? (
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+              buttonStyle={
+                colorScheme === 'dark'
+                  ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
+                  : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
+              }
+              cornerRadius={radius.md}
+              style={styles.appleButton}
+              onPress={handleAppleAuth}
+            />
+          ) : null}
+        </Card>
+      </Screen>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  page: {
+    flex: 1,
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFill,
+    overflow: 'hidden',
+  },
+  backdropOrb: {
+    position: 'absolute',
+    borderRadius: 999,
+    opacity: 0.45,
+  },
+  backdropOrbPrimary: {
+    width: 420,
+    height: 420,
+    top: -120,
+    right: -80,
+  },
+  backdropOrbSecondary: {
+    width: 320,
+    height: 320,
+    bottom: -100,
+    left: -60,
+    opacity: 0.55,
+  },
+  backdropTile: {
+    position: 'absolute',
+    borderRadius: 18,
+    opacity: 0.18,
+  },
+  backdropTileOne: {
+    width: 88,
+    height: 88,
+    top: '18%',
+    left: '8%',
+    transform: [{ rotate: '-8deg' }],
+  },
+  backdropTileTwo: {
+    width: 72,
+    height: 72,
+    top: '28%',
+    right: '12%',
+    transform: [{ rotate: '12deg' }],
+  },
+  backdropTileThree: {
+    width: 64,
+    height: 64,
+    bottom: '22%',
+    right: '18%',
+    transform: [{ rotate: '-14deg' }],
+  },
   center: { justifyContent: 'center' },
   content: {
     justifyContent: 'center',
     width: '100%',
     alignSelf: 'center',
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 32,
   },
-  formCard: { gap: 16, paddingVertical: 34, paddingHorizontal: 28 },
+  formCard: {
+    borderCurve: 'continuous',
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  brandBlock: {
+    gap: 10,
+  },
   brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 14,
+    gap: 10,
   },
   logoMark: {
-    width: 28,
-    height: 28,
-    borderRadius: 12,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     borderCurve: 'continuous',
     alignItems: 'center',
     justifyContent: 'center',
   },
+  logoText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  personality: {
+    letterSpacing: 0.8,
+  },
+  copyBlock: {
+    gap: 8,
+    marginBottom: 4,
+  },
+  headline: {
+    fontSize: 24,
+    lineHeight: 30,
+    letterSpacing: -0.3,
+  },
+  subcopy: {
+    lineHeight: 20,
+  },
   centerText: { textAlign: 'center', marginTop: 12 },
   form: {
-    gap: 16,
-    marginTop: 12,
+    gap: 14,
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  dividerLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
   },
   rowBetween: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 6,
+    marginTop: -2,
   },
-  primaryButton: { marginTop: 6 },
-  secondaryButton: { marginTop: 10 },
   appleButton: {
     width: '100%',
-    height: 50,
+    height: 48,
+    marginTop: 2,
   },
 });

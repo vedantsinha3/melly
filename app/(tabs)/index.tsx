@@ -1,28 +1,27 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import {
-  FlatList,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  useWindowDimensions,
-  View,
+    FlatList,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    useWindowDimensions,
+    View,
 } from 'react-native';
 
 import {
-  DashboardActivityList,
-  DashboardArtistRail,
-  DashboardCollectionMeta,
-  DashboardHero,
-  DashboardScoreChart,
-  DashboardToolbar,
+    DashboardActivityList,
+    DashboardArtistRail,
+    DashboardHero,
+    DashboardScoreChart,
+    DashboardToolbar,
 } from '@/components/dashboard';
 import { RankedListItem } from '@/components/RankedListItem';
 import { EmptyState, LoadingState, Screen, Text, wideScrollContentStyle } from '@/components/ui';
+import { useColorScheme } from '@/components/useColorScheme';
+import { getTheme, layout } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useImportQueue } from '@/contexts/ImportQueueContext';
-import { getTheme, layout } from '@/constants/theme';
-import { useColorScheme } from '@/components/useColorScheme';
 import { buildDashboardViewModel } from '@/lib/dashboard';
 import { fetchRankedRatings } from '@/lib/ranking';
 import type { RatingWithTrack } from '@/types';
@@ -203,11 +202,6 @@ export default function RankedListScreen() {
           showFullRanking={showFullRanking}
           showSignOut={!isWide}
           onSignOut={requestSignOut}
-        />
-
-        <DashboardCollectionMeta
-          notesCoverage={dashboard.rankingHealth.notesCoverage}
-          previewCoverage={dashboard.rankingHealth.previewCoverage}
         />
 
         {ratings.length === 0 ? (

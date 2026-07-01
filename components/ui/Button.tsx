@@ -56,7 +56,11 @@ export function Button({
                     : 'transparent',
             borderWidth: 0,
             ...(isWebHover && variant === 'primary'
-              ? { backgroundColor: '#148B3E', transform: [{ translateY: -1 }] }
+              ? {
+                  backgroundColor: '#148B3E',
+                  transform: [{ translateY: -1 }],
+                  boxShadow: `0 4px 14px ${colors.shadowStrong}`,
+                }
               : null),
             ...(isWebHover && variant === 'secondary'
               ? { backgroundColor: colors.surfaceHover }
