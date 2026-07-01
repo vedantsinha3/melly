@@ -1,9 +1,9 @@
-import type { RatingWithTrack } from '@/types';
 import {
-  buildTasteProfileAnalytics,
-  type HistogramBucket,
-  type TasteProfileModule,
+    buildTasteProfileAnalytics,
+    type HistogramBucket,
+    type TasteProfileModule,
 } from '@/lib/scoreHistogram';
+import type { RatingWithTrack } from '@/types';
 
 type QueueProgress = {
   isActive: boolean;

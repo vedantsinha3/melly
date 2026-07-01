@@ -1,8 +1,8 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Button, Text } from '@/components/ui';
-import { getTheme } from '@/constants/theme';
 import { useColorScheme } from '@/components/useColorScheme';
+import { getTheme } from '@/constants/theme';
 
 type Props = {
   displayName: string;
