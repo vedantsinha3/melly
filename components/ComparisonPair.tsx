@@ -4,10 +4,11 @@ import { useEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, {
   FadeIn,
+  FadeInLeft,
+  FadeInRight,
   FadeOut,
   useAnimatedStyle,
   useSharedValue,
-  withRepeat,
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
@@ -20,6 +21,8 @@ import type { Track } from '@/types';
 type SongCardProps = {
   track: Track;
   meta: string;
+  metaVariant: 'new' | 'ranked';
+  side: 'left' | 'right';
   onPress: () => void;
   selected: boolean;
   defeated: boolean;
@@ -30,6 +33,8 @@ type SongCardProps = {
 function ComparisonSongCard({
   track,
   meta,
+  metaVariant,
+  side,
   onPress,
   selected,
   defeated,
@@ -40,15 +45,24 @@ function ComparisonSongCard({
   const { colors, radius, motion, elevation } = getTheme(colorScheme);
   const scale = useSharedValue(1);
   const artScale = useSharedValue(1);
+  const [isHovered, setIsHovered] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
 
   useEffect(() => {
     if (selected) {
-      scale.value = withTiming(1.03, { duration: 280 });
-      artScale.value = withTiming(1.04, { duration: 280 });
+      scale.value = withTiming(1.035, { duration: 260 });
+      artScale.value = withTiming(1.05, { duration: 240 });
     } else if (defeated) {
-      scale.value = withTiming(0.97, { duration: 280 });
+      scale.value = withTiming(0.965, { duration: 260 });
+      artScale.value = withTiming(1, { duration: 180 });
+    } else if (isHovered) {
+      scale.value = withTiming(1.015, { duration: 180 });
+      artScale.value = withTiming(1.02, { duration: 180 });
+    } else {
+      scale.value = withTiming(1, { duration: 180 });
+      artScale.value = withTiming(1, { duration: 180 });
     }
-  }, [selected, defeated, scale, artScale]);
+  }, [selected, defeated, isHovered, scale, artScale]);
 
   const cardAnim = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -60,9 +74,15 @@ function ComparisonSongCard({
   }));
 
   return (
-    <Animated.View style={[styles.cardOuter, cardAnim]}>
+    <Animated.View
+      entering={(side === 'left' ? FadeInLeft : FadeInRight).duration(220)}
+      style={[styles.cardOuter, cardAnim]}>
       <Pressable
         onPress={onPress}
+        onHoverIn={() => setIsHovered(true)}
+        onHoverOut={() => setIsHovered(false)}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
         style={({ pressed, hovered }) => [
@@ -70,36 +90,66 @@ function ComparisonSongCard({
           {
             backgroundColor: colors.surface,
             borderRadius: radius.lg,
-            padding: 20,
+            padding: 18,
             borderWidth: selected ? 2 : 1,
             borderColor: selected ? colors.accent : colors.border,
             ...(Platform.OS === 'web'
-              ? { cursor: 'pointer' as const, transitionDuration: `${motion.normal}ms` }
+              ? { cursor: 'pointer' as const, transitionDuration: `${motion.fast}ms` }
               : null),
             ...(Platform.OS === 'web' && hovered && !selected && !defeated
               ? {
                   borderColor: colors.accent,
-                  boxShadow: `0 12px 32px ${colors.shadow}`,
-                  transform: [{ scale: 1.02 }],
+                  boxShadow: `0 14px 30px ${colors.shadow}`,
                   backgroundColor: colors.surfaceMuted,
                 }
               : elevation.subtle),
-            opacity: pressed ? 0.92 : 1,
+            ...(isFocused
+              ? {
+                  borderColor: colors.accent,
+                  boxShadow: `0 0 0 3px ${colors.accentSoft}`,
+                }
+              : null),
+            ...(pressed && !defeated
+              ? {
+                  transform: [{ scale: 0.99 }],
+                  borderColor: colors.accent,
+                  backgroundColor: colors.surfaceMuted,
+                }
+              : null),
+            opacity: pressed && !defeated ? 0.96 : 1,
           },
-        ]}>
+        ]}
+        {...(Platform.OS === 'web'
+          ? {
+              onKeyDown: (event: { key?: string; preventDefault?: () => void }) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault?.();
+                  onPress();
+                }
+              },
+            }
+          : null)}>
         <Animated.View style={artAnim}>
-          <Image
-            source={{ uri: track.album_art_url ?? undefined }}
+          <View
             style={[
-              styles.artwork,
+              styles.artFrame,
               {
                 width: artSize,
                 height: artSize,
                 borderRadius: radius.md,
               },
-            ]}
-            contentFit="cover"
-          />
+            ]}>
+            <Image
+              source={{ uri: track.album_art_url ?? undefined }}
+              style={[
+                styles.artwork,
+                {
+                  borderRadius: radius.md,
+                },
+              ]}
+              contentFit="cover"
+            />
+          </View>
         </Animated.View>
         <Text variant="heading" style={styles.title} numberOfLines={2}>
           {track.name}
@@ -111,13 +161,15 @@ function ComparisonSongCard({
           style={[
             styles.metaPill,
             {
-              backgroundColor: colors.surfaceMuted,
+              backgroundColor: metaVariant === 'new' ? colors.accentSoft : colors.surfaceMuted,
+              borderWidth: 1,
+              borderColor: metaVariant === 'new' ? colors.accentMuted : colors.border,
               borderRadius: radius.pill,
               paddingHorizontal: 10,
               paddingVertical: 4,
             },
           ]}>
-          <Text variant="caption" tone="tertiary">
+          <Text variant="caption" tone={metaVariant === 'new' ? 'accent' : 'tertiary'}>
             {meta}
           </Text>
         </View>
@@ -132,11 +184,7 @@ function VsBadge() {
   const pulse = useSharedValue(1);
 
   useEffect(() => {
-    pulse.value = withRepeat(
-      withSequence(withTiming(1.06, { duration: 900 }), withTiming(1, { duration: 900 })),
-      2,
-      false,
-    );
+    pulse.value = withSequence(withTiming(1.06, { duration: 280 }), withTiming(1, { duration: 300 }));
   }, [pulse]);
 
   const anim = useAnimatedStyle(() => ({
@@ -145,13 +193,15 @@ function VsBadge() {
 
   return (
     <Animated.View
+      entering={FadeIn.duration(180)}
       style={[
         styles.vsWrap,
         anim,
         {
           backgroundColor: colors.surface,
-          borderColor: colors.border,
-          ...elevation.card,
+          borderColor: colors.accentMuted,
+          boxShadow: `0 8px 24px ${colors.shadow}`,
+          ...elevation.subtle,
         },
       ]}>
       <Text style={[styles.vsText, { color: colors.text }]}>VS</Text>
@@ -177,6 +227,8 @@ export function ComparisonPair({
   disabled = false,
 }: Props) {
   const { width } = useWindowDimensions();
+  const colorScheme = useColorScheme() ?? 'light';
+  const { colors } = getTheme(colorScheme);
   const isWide = width >= 720;
   const artSize = isWide ? 168 : width >= 400 ? 148 : 132;
   const [winner, setWinner] = useState<'new' | 'compare' | null>(null);
@@ -188,18 +240,23 @@ export function ComparisonPair({
     setTimeout(() => {
       callback();
       setWinner(null);
-    }, 380);
+    }, 320);
   };
 
   const newArtists = newTrack.artist_names.join(', ');
   const compareArtists = compareTrack.artist_names.join(', ');
+  const winnerTrack = winner === 'new' ? newTrack.name : winner === 'compare' ? compareTrack.name : null;
+  const loserTrack = winner === 'new' ? compareTrack.name : winner === 'compare' ? newTrack.name : null;
 
   return (
     <Animated.View entering={FadeIn.duration(280)} exiting={FadeOut.duration(200)} style={styles.container}>
       <View style={[styles.duelRow, isWide ? styles.duelRowWide : null]}>
+        <View style={[styles.connector, { backgroundColor: colors.border }]} />
         <ComparisonSongCard
           track={newTrack}
           meta="New song"
+          metaVariant="new"
+          side="left"
           selected={winner === 'new'}
           defeated={winner === 'compare'}
           onPress={() => pick('new', onPreferNew)}
@@ -212,6 +269,8 @@ export function ComparisonPair({
         <ComparisonSongCard
           track={compareTrack}
           meta={compareMeta}
+          metaVariant="ranked"
+          side="right"
           selected={winner === 'compare'}
           defeated={winner === 'new'}
           onPress={() => pick('compare', onPreferCompare)}
@@ -220,9 +279,17 @@ export function ComparisonPair({
         />
       </View>
 
-      <Text variant="caption" tone="tertiary" style={styles.hint}>
-        Tap the song that deserves the higher spot
-      </Text>
+      {winnerTrack && loserTrack ? (
+        <Animated.View entering={FadeIn.duration(120)} exiting={FadeOut.duration(100)} style={styles.confirmation}>
+          <Text variant="caption" tone="accent" style={styles.confirmTitle}>
+            Nice choice.
+          </Text>
+          <Text variant="caption" tone="secondary" style={styles.confirmBody}>
+            {winnerTrack} beats {loserTrack}
+          </Text>
+        </Animated.View>
+      ) : null}
+
     </Animated.View>
   );
 }
@@ -233,21 +300,28 @@ const styles = StyleSheet.create({
     maxWidth: 920,
     alignSelf: 'center',
     alignItems: 'center',
-    gap: 14,
+    gap: 12,
     paddingHorizontal: 4,
-    flex: 1,
-    justifyContent: 'center',
   },
   duelRow: {
     width: '100%',
     alignItems: 'center',
     gap: 16,
+    position: 'relative',
   },
   duelRowWide: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 20,
+  },
+  connector: {
+    position: 'absolute',
+    top: '50%',
+    left: '22%',
+    right: '22%',
+    height: StyleSheet.hairlineWidth,
+    transform: [{ translateY: -0.5 }],
   },
   cardOuter: {
     flex: 1,
@@ -260,7 +334,13 @@ const styles = StyleSheet.create({
     borderCurve: 'continuous',
   },
   artwork: {
+    width: '100%',
+    height: '100%',
     backgroundColor: '#1a1a1a',
+    borderCurve: 'continuous',
+  },
+  artFrame: {
+    overflow: 'hidden',
     borderCurve: 'continuous',
   },
   title: {
@@ -293,5 +373,17 @@ const styles = StyleSheet.create({
   hint: {
     textAlign: 'center',
     width: '100%',
+    fontWeight: '500',
+  },
+  confirmation: {
+    alignItems: 'center',
+    gap: 2,
+    minHeight: 34,
+  },
+  confirmTitle: {
+    fontWeight: '700',
+  },
+  confirmBody: {
+    textAlign: 'center',
   },
 });

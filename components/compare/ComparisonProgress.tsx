@@ -16,6 +16,15 @@ export function ComparisonProgress({ current, total, queueLabel }: Props) {
   const { width } = useWindowDimensions();
   const isWide = width >= 720;
   const progress = total > 0 ? Math.min(current / total, 1) : 0;
+  const remaining = Math.max(total - current, 0);
+  const helper =
+    total <= 1
+      ? 'Final comparison'
+      : remaining === 0
+        ? 'Final comparison'
+        : remaining <= 2
+          ? `${remaining} comparison${remaining === 1 ? '' : 's'} remaining`
+          : 'A few picks to place this song';
 
   return (
     <View style={[styles.wrap, { gap: spacing.sm, maxWidth: isWide ? 480 : undefined }]}>
@@ -29,7 +38,7 @@ export function ComparisonProgress({ current, total, queueLabel }: Props) {
           Comparison {current} of {total}
         </Text>
         <Text variant="caption" tone="tertiary">
-          A few picks to place this song
+          {helper}
         </Text>
       </View>
       <View style={[styles.track, { backgroundColor: colors.surfaceMuted, borderRadius: radius.pill }]}>

@@ -43,6 +43,13 @@ function buildCompareMeta(rating: RatingWithTrack, low: number, high: number, li
   return `Currently #${rank} · Rated ${score}`;
 }
 
+function estimateLabel(confidence: number): string {
+  if (confidence < 35) return 'Early estimate';
+  if (confidence < 55) return 'Still learning your taste';
+  if (confidence < 75) return 'Placement is sharpening';
+  return `${confidence}% confidence`;
+}
+
 type PlacementContext = {
   insertionIndex: number;
   comparisonCount: number;
@@ -263,40 +270,46 @@ export default function CompareScreen() {
   const queueLabel = isActive
     ? `Ranking song ${queueProgress.current} of ${queueProgress.total}`
     : null;
+  const confidenceLabel = estimateLabel(placement.confidence);
 
   return (
     <Screen contentStyle={styles.container}>
-      <View style={styles.header}>
-        <ComparisonProgress
-          current={comparisonsMade + 1}
-          total={estimatedTotal}
-          queueLabel={queueLabel}
-        />
-        <Text variant="title" style={styles.prompt}>
-          Which song deserves the higher spot?
-        </Text>
-        <View style={[styles.estimateRow, { backgroundColor: colors.surfaceMuted, borderRadius: 12 }]}>
-          <Text variant="caption" tone="secondary">
-            Estimated rating{' '}
-            <Text variant="label">{placement.estimatedScore.toFixed(1)}</Text>
-            {' · '}
-            Likely near <Text variant="label">#{placement.estimatedRank}</Text>
-            {' · '}
-            <Text variant="caption" tone="tertiary">
-              {placement.confidence}% confidence
+      <View style={styles.comparisonGroup}>
+        <View style={styles.header}>
+          <ComparisonProgress
+            current={comparisonsMade + 1}
+            total={estimatedTotal}
+            queueLabel={queueLabel}
+          />
+          <Text variant="title" style={styles.prompt}>
+            Which song deserves the higher spot?
+          </Text>
+          <View style={[styles.estimateRow, { backgroundColor: colors.surfaceMuted, borderRadius: 12 }]}>
+            <Text variant="caption" tone="secondary">
+              Estimated rating{' '}
+              <Text variant="label">{placement.estimatedScore.toFixed(1)}</Text>
+              {' · '}
+              Likely near <Text variant="label">#{placement.estimatedRank}</Text>
+              {' · '}
+              <Text variant="caption" tone="secondary">
+                {confidenceLabel}
+              </Text>
             </Text>
+          </View>
+          <Text variant="caption" tone="tertiary" style={styles.estimateContext}>
+            Testing against a nearby ranked song
           </Text>
         </View>
-      </View>
 
-      <ComparisonPair
-        key={`${compareRating.track.spotify_id}-${comparisonsMade}`}
-        newTrack={newTrack}
-        compareTrack={compareRating.track}
-        compareMeta={compareMeta}
-        onPreferNew={() => handleChoice(true)}
-        onPreferCompare={() => handleChoice(false)}
-      />
+        <ComparisonPair
+          key={`${compareRating.track.spotify_id}-${comparisonsMade}`}
+          newTrack={newTrack}
+          compareTrack={compareRating.track}
+          compareMeta={compareMeta}
+          onPreferNew={() => handleChoice(true)}
+          onPreferCompare={() => handleChoice(false)}
+        />
+      </View>
     </Screen>
   );
 }
@@ -304,7 +317,13 @@ export default function CompareScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    gap: 8,
+    justifyContent: 'center',
+  },
+  comparisonGroup: {
+    width: '100%',
+    maxWidth: 940,
+    alignSelf: 'center',
+    gap: 24,
   },
   placementScreen: {
     flex: 1,
@@ -317,9 +336,9 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   header: {
-    gap: 14,
-    paddingTop: 4,
-    paddingBottom: 8,
+    gap: 12,
+    paddingTop: 2,
+    paddingBottom: 6,
   },
   prompt: {
     textAlign: 'center',
@@ -332,6 +351,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     maxWidth: 520,
+  },
+  estimateContext: {
+    textAlign: 'center',
+    marginTop: -2,
   },
   errorTitle: {
     textAlign: 'center',
