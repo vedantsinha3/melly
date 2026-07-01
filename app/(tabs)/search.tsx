@@ -151,6 +151,11 @@ export default function SearchScreen() {
       if (!user) return;
 
       const spotifyId = 'spotify_id' in item ? item.spotify_id : item.id;
+      if (!spotifyId) {
+        Alert.alert('Error', 'This track is missing a Spotify ID and cannot be ranked.');
+        return;
+      }
+
       setLogging(spotifyId);
 
       try {
@@ -159,7 +164,12 @@ export default function SearchScreen() {
 
         const exists = await hasExistingRating(user.id, track.spotify_id);
         if (exists) {
-          const existing = rankedRatings.find((rating) => rating.track.spotify_id === track.spotify_id);
+          let existing = rankedRatings.find((rating) => rating.track.spotify_id === track.spotify_id);
+          if (!existing) {
+            const fresh = await fetchRankedRatings(user.id);
+            setRankedRatings(fresh);
+            existing = fresh.find((rating) => rating.track.spotify_id === track.spotify_id);
+          }
           if (existing) {
             openRankedSong(existing.id);
             return;
@@ -169,7 +179,7 @@ export default function SearchScreen() {
           return;
         }
 
-        router.push(`/compare/${track.spotify_id}`);
+        router.replace(`/compare/${track.spotify_id}`);
       } catch (error) {
         Alert.alert('Error', error instanceof Error ? error.message : 'Failed to start ranking');
       } finally {
@@ -264,7 +274,8 @@ export default function SearchScreen() {
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[wideScrollContentStyle(), styles.content, { gap: spacing.lg, paddingBottom: spacing['2xl'] }]}
-        keyboardShouldPersistTaps="handled">
+        keyboardShouldPersistTaps="always"
+        keyboardDismissMode="on-drag">
         <LogSongProgressBanner
           headline={progress.headline}
           subline={progress.subline}

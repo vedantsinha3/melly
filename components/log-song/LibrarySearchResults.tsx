@@ -98,10 +98,17 @@ export function LibrarySearchResults({
           model.spotify.map((match, index) => {
             const flatIndex = getFlatIndex(model, 'spotify', index);
             const isRanked = match.alreadyRanked && match.matchedRating;
+            const handlePress = () => {
+              if (isRanked && match.matchedRating) {
+                onViewRanked(match.matchedRating.id);
+                return;
+              }
+              onRankSpotify(match.track);
+            };
 
             return (
               <LibrarySearchRow
-                key={match.track.id}
+                key={`${match.track.id}-${index}`}
                 artworkUrl={match.track.album.images[0]?.url ?? null}
                 title={match.track.name}
                 artist={match.track.artists.map((artist) => artist.name).join(', ')}
@@ -112,11 +119,7 @@ export function LibrarySearchResults({
                 actionLabel={isRanked ? 'View details' : 'Rank this song'}
                 loading={loggingId === match.track.id}
                 selected={selectedIndex === flatIndex}
-                onPress={() =>
-                  isRanked && match.matchedRating
-                    ? onViewRanked(match.matchedRating.id)
-                    : onRankSpotify(match.track)
-                }
+                onPress={handlePress}
               />
             );
           })

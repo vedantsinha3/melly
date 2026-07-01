@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 
 import { ComparisonPair } from '@/components/ComparisonPair';
+import { ComparisonPlacementLoader } from '@/components/compare/ComparisonPlacementLoader';
 import { ComparisonProgress } from '@/components/compare/ComparisonProgress';
 import { ComparisonSkeleton } from '@/components/compare/ComparisonSkeleton';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -10,6 +11,7 @@ import { Button, Screen, Text } from '@/components/ui';
 import { getTheme } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useImportQueue } from '@/contexts/ImportQueueContext';
+import { buildPlacementSearchSteps } from '@/lib/comparisonPlacement';
 import { markOnboardingCompleted } from '@/lib/profile';
 import {
   applyComparison,
@@ -20,6 +22,7 @@ import {
   getComparisonIndex,
   insertFirstRating,
   isComparisonComplete,
+  scoreForRank,
 } from '@/lib/ranking';
 import { supabase } from '@/lib/supabase';
 import type { RatingWithTrack, Track } from '@/types';
@@ -40,6 +43,14 @@ function buildCompareMeta(rating: RatingWithTrack, low: number, high: number, li
   return `Currently #${rank} · Rated ${score}`;
 }
 
+type PlacementContext = {
+  insertionIndex: number;
+  comparisonCount: number;
+  rank: number;
+  score: number;
+  searchSteps: ReturnType<typeof buildPlacementSearchSteps>;
+};
+
 export default function CompareScreen() {
   const { trackId } = useLocalSearchParams<{ trackId: string }>();
   const colorScheme = useColorScheme() ?? 'light';
@@ -59,6 +70,9 @@ export default function CompareScreen() {
   >([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [placementContext, setPlacementContext] = useState<PlacementContext | null>(null);
+  const [saveComplete, setSaveComplete] = useState(false);
+  const [savedRatingId, setSavedRatingId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const handleQueueAdvance = useCallback(
@@ -76,7 +90,7 @@ export default function CompareScreen() {
         clearQueue();
       }
 
-      router.replace('/(tabs)/search');
+      router.replace(`/song/${ratingId}`);
     },
     [user, isActive, advanceToNext, clearQueue, router],
   );
@@ -89,6 +103,9 @@ export default function CompareScreen() {
     setComparisonsMade(0);
     setComparisonLog([]);
     setLow(0);
+    setPlacementContext(null);
+    setSaveComplete(false);
+    setSavedRatingId(null);
 
     try {
       const [{ data: track, error: trackError }, ratings] = await Promise.all([
@@ -102,9 +119,9 @@ export default function CompareScreen() {
       setHigh(ratings.length);
 
       if (ratings.length === 0) {
-        setSubmitting(true);
         const ratingId = await insertFirstRating(user.id, trackId);
         await handleQueueAdvance(ratingId);
+        return;
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to load';
@@ -124,19 +141,40 @@ export default function CompareScreen() {
       insertionIndex: number,
       comparisons: { comparedTrackId: string; preferredTrackId: string }[],
     ) => {
-      if (!user || !trackId) return;
+      if (!user || !trackId || !newTrack) return;
 
+      const rank = insertionIndex + 1;
+      const score = scoreForRank(rank, rankedList.length + 1);
+      const searchSteps = buildPlacementSearchSteps(rankedList, comparisons, newTrack.spotify_id);
+
+      setPlacementContext({
+        insertionIndex,
+        comparisonCount: comparisons.length,
+        rank,
+        score,
+        searchSteps,
+      });
       setSubmitting(true);
+      setSaveComplete(false);
+      setSavedRatingId(null);
+
       try {
         const ratingId = await finalizeRating(user.id, trackId, insertionIndex, comparisons);
-        await handleQueueAdvance(ratingId);
+        setSavedRatingId(ratingId);
+        setSaveComplete(true);
       } catch (error) {
-        Alert.alert('Error', error instanceof Error ? error.message : 'Failed to save rating');
         setSubmitting(false);
+        setPlacementContext(null);
+        Alert.alert('Error', error instanceof Error ? error.message : 'Failed to save rating');
       }
     },
-    [user, trackId, handleQueueAdvance],
+    [user, trackId, newTrack, rankedList],
   );
+
+  const handlePlacementFinished = useCallback(() => {
+    if (!savedRatingId) return;
+    handleQueueAdvance(savedRatingId);
+  }, [savedRatingId, handleQueueAdvance]);
 
   const handleChoice = useCallback(
     (preferNew: boolean) => {
@@ -198,13 +236,19 @@ export default function CompareScreen() {
     );
   }
 
-  if (submitting) {
+  if (submitting && newTrack && placementContext) {
     return (
-      <Screen contentStyle={styles.centered}>
-        <Text variant="heading">Placing your song…</Text>
-        <Text variant="bodySmall" tone="secondary">
-          Updating your ranking
-        </Text>
+      <Screen contentStyle={styles.placementScreen}>
+        <ComparisonPlacementLoader
+          track={newTrack}
+          searchSteps={placementContext.searchSteps}
+          comparisonCount={placementContext.comparisonCount}
+          estimatedTotal={estimatedTotal}
+          placementRank={placementContext.rank}
+          placementScore={placementContext.score}
+          saveComplete={saveComplete}
+          onFinished={handlePlacementFinished}
+        />
       </Screen>
     );
   }
@@ -261,6 +305,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     gap: 8,
+  },
+  placementScreen: {
+    flex: 1,
   },
   centered: {
     flex: 1,
