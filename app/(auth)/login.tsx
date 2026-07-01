@@ -96,7 +96,7 @@ export default function LoginScreen() {
         </View>
 
         <Text variant="bodySmall" tone="secondary">
-          Please enter your details
+          Build your personal music rankings.
         </Text>
         <Text variant="title">Welcome back</Text>
 
