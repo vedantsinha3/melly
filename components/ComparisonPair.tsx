@@ -1,9 +1,10 @@
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
-import { Colors } from '@/constants/theme';
+import { getTheme } from '@/constants/theme';
 import { useColorScheme } from '@/components/useColorScheme';
+import { Text } from '@/components/ui';
 import type { Track } from '@/types';
 
 type Props = {
@@ -17,30 +18,39 @@ function TrackCard({
   track,
   label,
   onPress,
-  colors,
+  theme,
 }: {
   track: Track;
   label: string;
   onPress: () => void;
-  colors: (typeof Colors)['light'];
+  theme: ReturnType<typeof getTheme>;
 }) {
+  const { colors, radius, elevation } = theme;
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [
         styles.card,
-        { backgroundColor: colors.surface, borderColor: colors.border, opacity: pressed ? 0.85 : 1 },
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          opacity: pressed ? 0.85 : 1,
+          borderRadius: radius.md,
+        },
+        elevation.card,
       ]}>
-      <Text style={[styles.label, { color: colors.textSecondary }]}>{label}</Text>
+      <Text variant="caption" tone="secondary" style={styles.label}>
+        {label}
+      </Text>
       <Image
         source={{ uri: track.album_art_url ?? undefined }}
         style={styles.artwork}
         contentFit="cover"
       />
-      <Text style={[styles.title, { color: colors.text }]} numberOfLines={2}>
+      <Text variant="heading" style={styles.title} numberOfLines={2}>
         {track.name}
       </Text>
-      <Text style={[styles.artist, { color: colors.textSecondary }]} numberOfLines={1}>
+      <Text variant="bodySmall" tone="secondary" style={styles.artist} numberOfLines={1}>
         {track.artist_names.join(', ')}
       </Text>
     </Pressable>
@@ -54,7 +64,8 @@ export function ComparisonPair({
   onPreferCompare,
 }: Props) {
   const colorScheme = useColorScheme() ?? 'light';
-  const colors = Colors[colorScheme];
+  const theme = getTheme(colorScheme);
+  const { colors } = theme;
 
   const handlePreferNew = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -72,17 +83,19 @@ export function ComparisonPair({
         track={newTrack}
         label="New song"
         onPress={handlePreferNew}
-        colors={colors}
+        theme={theme}
       />
-      <Text style={[styles.vs, { color: colors.textSecondary }]}>vs</Text>
+      <View style={[styles.vsPill, { backgroundColor: colors.surfaceMuted }]}>
+        <Text style={[styles.vs, { color: colors.textSecondary }]}>VS</Text>
+      </View>
       <TrackCard
         track={compareTrack}
         label="In your list"
         onPress={handlePreferCompare}
-        colors={colors}
+        theme={theme}
       />
       <View style={styles.hints}>
-        <Text style={[styles.hint, { color: colors.textSecondary }]}>
+        <Text variant="bodySmall" tone="secondary" style={styles.hint}>
           Tap the song you prefer
         </Text>
       </View>
@@ -94,12 +107,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
-    gap: 12,
+    gap: 14,
     justifyContent: 'center',
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
   },
   card: {
     flex: 1,
-    borderRadius: 16,
     borderWidth: 1,
     padding: 20,
     alignItems: 'center',
@@ -108,36 +123,29 @@ const styles = StyleSheet.create({
     maxHeight: 280,
   },
   label: {
-    fontSize: 13,
-    fontWeight: '600',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
   artwork: {
     width: 120,
     height: 120,
-    borderRadius: 12,
+    borderRadius: 8,
     backgroundColor: '#333',
   },
-  title: {
-    fontSize: 18,
-    fontWeight: '700',
+  title: { textAlign: 'center' },
+  artist: {
     textAlign: 'center',
   },
-  artist: {
-    fontSize: 14,
-    textAlign: 'center',
+  vsPill: {
+    alignSelf: 'center',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
   },
   vs: {
     textAlign: 'center',
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '700',
   },
-  hints: {
-    alignItems: 'center',
-    paddingTop: 8,
-  },
-  hint: {
-    fontSize: 14,
-  },
+  hints: { alignItems: 'center', paddingTop: 8 },
+  hint: {},
 });

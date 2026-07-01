@@ -15,7 +15,7 @@ import 'react-native-reanimated';
 import { useColorScheme } from '@/components/useColorScheme';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { ImportQueueProvider } from '@/contexts/ImportQueueContext';
-import { Colors } from '@/constants/theme';
+import { Colors, getTheme } from '@/constants/theme';
 import { isOnboardingCompleted } from '@/lib/profile';
 import { fetchRankedRatings } from '@/lib/ranking';
 
@@ -55,7 +55,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (loading) return;
 
-    const inAuthGroup = segments[0] === '(auth)';
+    const inAuthGroup = segments[0] === '(auth)' || segments[0] === 'auth';
 
     if (!session && !inAuthGroup) {
       router.replace('/(auth)/login');
@@ -153,7 +153,8 @@ export default function RootLayout() {
 }
 
 function RootLayoutNav() {
-  const colorScheme = useColorScheme();
+  const colorScheme = useColorScheme() ?? 'light';
+  const { colors } = getTheme(colorScheme);
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? AppDarkTheme : LightTheme}>
@@ -161,13 +162,32 @@ function RootLayoutNav() {
         <OnboardingGate>
           <Stack>
             <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+            <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="onboarding" options={{ headerShown: false }} />
             <Stack.Screen
               name="compare/[trackId]"
-              options={{ title: 'Rank this song', presentation: 'modal' }}
+              options={{
+                title: 'Rank this song',
+                presentation: 'modal',
+                headerLargeTitle: true,
+                headerShadowVisible: false,
+                headerStyle: { backgroundColor: colors.background },
+                headerTintColor: colors.text,
+                headerTitleStyle: { fontWeight: '700' },
+              }}
             />
-            <Stack.Screen name="song/[ratingId]" options={{ title: 'Song details' }} />
+            <Stack.Screen
+              name="song/[ratingId]"
+              options={{
+                title: 'Song details',
+                headerLargeTitle: false,
+                headerShadowVisible: false,
+                headerStyle: { backgroundColor: colors.background },
+                headerTintColor: colors.text,
+                headerTitleStyle: { fontWeight: '700' },
+              }}
+            />
           </Stack>
         </OnboardingGate>
       </AuthGate>

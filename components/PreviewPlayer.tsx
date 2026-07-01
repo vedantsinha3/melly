@@ -1,9 +1,10 @@
 import { Audio } from 'expo-av';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
+import { StyleSheet } from 'react-native';
 
-import { Colors } from '@/constants/theme';
+import { getTheme } from '@/constants/theme';
 import { useColorScheme } from '@/components/useColorScheme';
+import { Button, Text } from '@/components/ui';
 
 type Props = {
   previewUrl: string | null;
@@ -11,7 +12,7 @@ type Props = {
 
 export function PreviewPlayer({ previewUrl }: Props) {
   const colorScheme = useColorScheme() ?? 'light';
-  const colors = Colors[colorScheme];
+  const { colors } = getTheme(colorScheme);
   const soundRef = useRef<Audio.Sound | null>(null);
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -24,7 +25,7 @@ export function PreviewPlayer({ previewUrl }: Props) {
 
   if (!previewUrl) {
     return (
-      <Text style={[styles.unavailable, { color: colors.textSecondary }]}>
+      <Text variant="bodySmall" tone="secondary" style={styles.unavailable}>
         No preview available
       </Text>
     );
@@ -63,33 +64,20 @@ export function PreviewPlayer({ previewUrl }: Props) {
   };
 
   return (
-    <Pressable
+    <Button
+      title={playing ? 'Stop preview' : 'Play preview'}
+      loading={loading}
       onPress={togglePlayback}
-      style={[styles.button, { backgroundColor: colors.accent }]}>
-      {loading ? (
-        <ActivityIndicator color="#fff" />
-      ) : (
-        <Text style={styles.buttonText}>{playing ? 'Stop preview' : 'Play preview'}</Text>
-      )}
-    </Pressable>
+      style={styles.button}
+    />
   );
 }
 
 const styles = StyleSheet.create({
   button: {
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 24,
-    alignItems: 'center',
     alignSelf: 'center',
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
   },
   unavailable: {
     textAlign: 'center',
-    fontSize: 14,
   },
 });

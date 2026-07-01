@@ -1,18 +1,11 @@
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Alert, FlatList, StyleSheet, View } from 'react-native';
 
 import { SongCard } from '@/components/SongCard';
+import { Card, Screen, SectionHeader, Text, TextField } from '@/components/ui';
 import { useAuth } from '@/contexts/AuthContext';
-import { Colors } from '@/constants/theme';
+import { getTheme } from '@/constants/theme';
 import { useColorScheme } from '@/components/useColorScheme';
 import { hasExistingRating } from '@/lib/ranking';
 import { searchTracks, spotifyTrackToTrack, upsertTrack } from '@/lib/spotify';
@@ -20,7 +13,7 @@ import type { SpotifySearchTrack } from '@/types';
 
 export default function SearchScreen() {
   const colorScheme = useColorScheme() ?? 'light';
-  const colors = Colors[colorScheme];
+  const { colors, spacing } = getTheme(colorScheme);
   const { user } = useAuth();
   const router = useRouter();
 
@@ -28,6 +21,7 @@ export default function SearchScreen() {
   const [results, setResults] = useState<SpotifySearchTrack[]>([]);
   const [searching, setSearching] = useState(false);
   const [logging, setLogging] = useState<string | null>(null);
+  const hasQuery = query.trim().length > 0;
 
   useEffect(() => {
     if (!query.trim()) {
@@ -79,23 +73,46 @@ export default function SearchScreen() {
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <TextInput
-        style={[styles.input, { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border }]}
-        placeholder="Search for a song..."
-        placeholderTextColor={colors.textSecondary}
-        value={query}
-        onChangeText={setQuery}
-        autoCorrect={false}
-        autoCapitalize="none"
+    <Screen contentStyle={styles.container}>
+      <SectionHeader
+        title="Find a track"
+        subtitle="Search Spotify and add a song into your ranking flow."
       />
+
+      <Card
+        style={[
+          styles.searchBox,
+          {
+            gap: spacing.sm,
+          },
+        ]}>
+        <Text variant="caption" tone="secondary" style={styles.searchIcon}>
+          Search
+        </Text>
+        <TextField
+          style={styles.input}
+          placeholder="Song, artist, or album"
+          value={query}
+          onChangeText={setQuery}
+          autoCorrect={false}
+          autoCapitalize="none"
+        />
+      </Card>
 
       {searching ? (
         <ActivityIndicator style={styles.loader} color={colors.tint} />
       ) : null}
 
-      {!searching && query.trim().length > 0 && results.length === 0 ? (
-        <Text style={[styles.empty, { color: colors.textSecondary }]}>No results found</Text>
+      {!searching && hasQuery && results.length === 0 ? (
+        <Text variant="body" tone="secondary" style={styles.empty}>
+          No results found
+        </Text>
+      ) : null}
+
+      {!searching && !hasQuery ? (
+        <Text variant="body" tone="secondary" style={styles.empty}>
+          Your next favorite song goes here.
+        </Text>
       ) : null}
 
       <FlatList
@@ -110,29 +127,33 @@ export default function SearchScreen() {
               logging === item.id ? (
                 <ActivityIndicator color={colors.tint} />
               ) : (
-                <Text style={[styles.logText, { color: colors.accent }]}>Log</Text>
+                <Text variant="label" tone="accent">
+                  Log
+                </Text>
               )
             }
           />
         )}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
       />
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
+    gap: 12,
+  },
+  searchBox: {
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  searchIcon: {
+    textTransform: 'uppercase',
   },
   input: {
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 16,
     paddingVertical: 14,
-    fontSize: 16,
-    marginBottom: 8,
   },
   loader: {
     marginVertical: 16,
@@ -143,14 +164,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   list: {
-    paddingTop: 8,
+    paddingTop: 4,
     gap: 8,
   },
   separator: {
     height: 8,
-  },
-  logText: {
-    fontSize: 15,
-    fontWeight: '600',
   },
 });

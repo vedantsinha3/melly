@@ -1,17 +1,22 @@
-import * as QueryParams from 'expo-auth-session/build/QueryParams';
+import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
-import { makeRedirectUri } from 'expo-auth-session';
 import { Session, User } from '@supabase/supabase-js';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { Platform } from 'react-native';
+import { Alert, Platform } from 'react-native';
 
+import {
+  clearOAuthCallbackFromUrl,
+  createSessionFromOAuthUrl,
+  formatSpotifyOAuthError,
+  isOAuthCallbackUrl,
+  isSpotifyEmailVerificationCallback,
+  startSpotifyOAuth,
+} from '@/lib/oauth';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 
 WebBrowser.maybeCompleteAuthSession();
-
-const redirectTo = makeRedirectUri({ scheme: 'melly' });
 
 type AuthContextType = {
   session: Session | null;
@@ -28,28 +33,6 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-async function createSessionFromUrl(url: string) {
-  const { params, errorCode } = QueryParams.getQueryParams(url);
-
-  if (errorCode) {
-    throw new Error(errorCode);
-  }
-
-  const { access_token, refresh_token } = params;
-
-  if (!access_token) {
-    return null;
-  }
-
-  const { data, error } = await supabase.auth.setSession({
-    access_token,
-    refresh_token,
-  });
-
-  if (error) throw error;
-  return data.session;
-}
-
 function isSpotifySession(session: Session | null): boolean {
   if (!session) return false;
   if (session.provider_token) return true;
@@ -58,6 +41,7 @@ function isSpotifySession(session: Session | null): boolean {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
+  const [spotifyAccessToken, setSpotifyAccessToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -68,14 +52,65 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
       setSession(currentSession);
+      setSpotifyAccessToken(currentSession?.provider_token ?? null);
       setLoading(false);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, newSession) => {
       setSession(newSession);
+      setSpotifyAccessToken((currentToken) => {
+        if (event === 'SIGNED_OUT' || !newSession) return null;
+        return newSession.provider_token ?? currentToken;
+      });
     });
 
     return () => listener.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+
+    const handleOAuthCallback = async (url: string) => {
+      if (!isOAuthCallbackUrl(url)) return;
+
+      if (isSpotifyEmailVerificationCallback(url)) {
+        clearOAuthCallbackFromUrl();
+        Alert.alert('Confirm your email', formatSpotifyOAuthError('unverified email'));
+        return;
+      }
+
+      try {
+        const newSession = await createSessionFromOAuthUrl(url);
+        if (newSession) {
+          setSession(newSession);
+          setSpotifyAccessToken(newSession.provider_token ?? null);
+          clearOAuthCallbackFromUrl();
+          return;
+        }
+      } catch (error) {
+        clearOAuthCallbackFromUrl();
+        const message = error instanceof Error ? error.message : 'Spotify sign-in failed';
+        Alert.alert('Sign-in failed', formatSpotifyOAuthError(message));
+        console.error('OAuth callback error:', error);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && isOAuthCallbackUrl(window.location.href)) {
+        handleOAuthCallback(window.location.href);
+      }
+      return;
+    }
+
+    Linking.getInitialURL().then((url) => {
+      if (url) handleOAuthCallback(url);
+    });
+
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      handleOAuthCallback(url);
+    });
+
+    return () => subscription.remove();
   }, []);
 
   const signInWithEmail = async (email: string, password: string) => {
@@ -121,38 +156,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signInWithSpotify = async () => {
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'spotify',
-      options: {
-        redirectTo,
-        skipBrowserRedirect: true,
-        scopes: 'user-top-read user-read-email',
-      },
-    });
-
-    if (error) throw error;
-    if (!data.url) throw new Error('No OAuth URL returned from Supabase');
-
-    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-
-    if (result.type === 'success') {
-      await createSessionFromUrl(result.url);
-      return;
-    }
-
-    if (result.type === 'cancel' || result.type === 'dismiss') {
-      throw new Error('Spotify sign-in was cancelled');
-    }
+    await startSpotifyOAuth();
   };
 
   const getSpotifyAccessToken = async (): Promise<string | null> => {
+    if (spotifyAccessToken) {
+      return spotifyAccessToken;
+    }
+
     const { data: { session: currentSession } } = await supabase.auth.getSession();
     if (currentSession?.provider_token) {
+      setSpotifyAccessToken(currentSession.provider_token);
       return currentSession.provider_token;
     }
 
     const { data: { session: refreshedSession } } = await supabase.auth.refreshSession();
-    return refreshedSession?.provider_token ?? null;
+    const refreshedProviderToken = refreshedSession?.provider_token ?? null;
+    setSpotifyAccessToken(refreshedProviderToken);
+    return refreshedProviderToken;
   };
 
   const signOut = async () => {

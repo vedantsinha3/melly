@@ -1,8 +1,9 @@
 import { Image } from 'expo-image';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
-import { Colors } from '@/constants/theme';
+import { getTheme } from '@/constants/theme';
 import { useColorScheme } from '@/components/useColorScheme';
+import { Text } from '@/components/ui';
 import type { RatingWithTrack } from '@/types';
 
 type Props = {
@@ -13,7 +14,7 @@ type Props = {
 
 export function RankedListItem({ rating, onPress, highlighted }: Props) {
   const colorScheme = useColorScheme() ?? 'light';
-  const colors = Colors[colorScheme];
+  const { colors, spacing, radius, elevation } = getTheme(colorScheme);
 
   return (
     <Pressable
@@ -21,12 +22,23 @@ export function RankedListItem({ rating, onPress, highlighted }: Props) {
       style={({ pressed }) => [
         styles.container,
         {
-          backgroundColor: highlighted ? colors.surface : colors.background,
-          borderBottomColor: colors.border,
+          backgroundColor: highlighted ? colors.accentSoft : colors.surface,
+          borderColor: highlighted ? colors.accent : colors.border,
+          borderRadius: radius.md,
+          padding: spacing.md,
           opacity: pressed ? 0.7 : 1,
         },
+        elevation.card,
       ]}>
-      <Text style={[styles.rank, { color: colors.textSecondary }]}>
+      <Text
+        style={[
+          styles.rank,
+          {
+            color: highlighted ? colors.accent : colors.textSecondary,
+            backgroundColor: highlighted ? colors.surface : colors.surfaceMuted,
+            borderRadius: radius.pill,
+          },
+        ]}>
         {rating.rank_position}
       </Text>
       <Image
@@ -35,16 +47,18 @@ export function RankedListItem({ rating, onPress, highlighted }: Props) {
         contentFit="cover"
       />
       <View style={styles.info}>
-        <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
+        <Text variant="label" numberOfLines={1}>
           {rating.track.name}
         </Text>
-        <Text style={[styles.artist, { color: colors.textSecondary }]} numberOfLines={1}>
+        <Text variant="caption" tone="secondary" numberOfLines={1}>
           {rating.track.artist_names.join(', ')}
         </Text>
       </View>
-      <Text style={[styles.score, { color: colors.score }]}>
-        {Number(rating.score).toFixed(1)}
-      </Text>
+      <View style={[styles.scorePill, { backgroundColor: colors.accentSoft }]}>
+        <Text variant="label" tone="score" style={styles.score}>
+          {Number(rating.score).toFixed(1)}
+        </Text>
+      </View>
     </Pressable>
   );
 }
@@ -53,15 +67,18 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderCurve: 'continuous',
+    borderWidth: 1,
     gap: 12,
   },
   rank: {
-    width: 28,
-    fontSize: 16,
-    fontWeight: '600',
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    overflow: 'hidden',
+    fontSize: 15,
+    fontWeight: '800',
+    lineHeight: 34,
     textAlign: 'center',
   },
   artwork: {
@@ -74,17 +91,14 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
-  title: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  artist: {
-    fontSize: 13,
+  scorePill: {
+    minWidth: 48,
+    alignItems: 'center',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
   score: {
-    fontSize: 16,
-    fontWeight: '700',
-    minWidth: 36,
-    textAlign: 'right',
+    fontVariant: ['tabular-nums'],
   },
 });

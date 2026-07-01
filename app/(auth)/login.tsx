@@ -1,31 +1,22 @@
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Alert, Platform, Pressable, StyleSheet, View } from 'react-native';
 
-import { useAuth } from '@/contexts/AuthContext';
-import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/components/useColorScheme';
+import { Button, Card, Screen, Text, TextField } from '@/components/ui';
+import { useAuth } from '@/contexts/AuthContext';
+import { getTheme } from '@/constants/theme';
 import { isSupabaseConfigured } from '@/lib/supabase';
+import { formatSpotifyOAuthError } from '@/lib/oauth';
 
 export default function LoginScreen() {
   const colorScheme = useColorScheme() ?? 'light';
-  const colors = Colors[colorScheme];
+  const { colors, layout, radius, spacing } = getTheme(colorScheme);
   const { signInWithEmail, signUpWithEmail, signInWithApple, signInWithSpotify } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
-  const [showOtherOptions, setShowOtherOptions] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleEmailAuth = async () => {
@@ -69,7 +60,7 @@ export default function LoginScreen() {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Spotify Sign-In failed';
       if (!message.toLowerCase().includes('cancel')) {
-        Alert.alert('Error', message);
+        Alert.alert('Error', formatSpotifyOAuthError(message));
       }
     } finally {
       setLoading(false);
@@ -78,165 +69,142 @@ export default function LoginScreen() {
 
   if (!isSupabaseConfigured) {
     return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <Text style={[styles.logo, { color: colors.text }]}>Melly</Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+      <Screen contentStyle={styles.center}>
+        <Text variant="display" style={styles.centerText}>
+          Melly
+        </Text>
+        <Text variant="body" tone="secondary" style={styles.centerText}>
           Configure EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in .env to get
           started.
         </Text>
-      </View>
+      </Screen>
     );
   }
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={styles.content}>
-        <Text style={[styles.logo, { color: colors.text }]}>Melly</Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          Rank the songs you love
-        </Text>
-
-        <Pressable
-          style={[styles.spotifyButton, { backgroundColor: '#1DB954' }]}
-          onPress={handleSpotifyAuth}
-          disabled={loading}>
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.spotifyButtonText}>Continue with Spotify</Text>
-          )}
-        </Pressable>
-
-        <Pressable onPress={() => setShowOtherOptions(!showOtherOptions)}>
-          <Text style={[styles.otherOptionsText, { color: colors.textSecondary }]}>
-            {showOtherOptions ? 'Hide other sign-in options' : 'Other sign-in options'}
-          </Text>
-        </Pressable>
-
-        {showOtherOptions ? (
-          <View style={styles.form}>
-            <TextInput
-              style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface }]}
-              placeholder="Email"
-              placeholderTextColor={colors.textSecondary}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              value={email}
-              onChangeText={setEmail}
-            />
-            <TextInput
-              style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.surface }]}
-              placeholder="Password"
-              placeholderTextColor={colors.textSecondary}
-              secureTextEntry
-              value={password}
-              onChangeText={setPassword}
-            />
-
-            <Pressable
-              style={[styles.secondaryButton, { borderColor: colors.border }]}
-              onPress={handleEmailAuth}
-              disabled={loading}>
-              <Text style={[styles.secondaryButtonText, { color: colors.text }]}>
-                {isSignUp ? 'Create account' : 'Sign in with email'}
-              </Text>
-            </Pressable>
-
-            <Pressable onPress={() => setIsSignUp(!isSignUp)}>
-              <Text style={[styles.switchText, { color: colors.textSecondary }]}>
-                {isSignUp ? 'Already have an account? Sign in' : 'Need an account? Sign up'}
-              </Text>
-            </Pressable>
-
-            {Platform.OS === 'ios' ? (
-              <AppleAuthentication.AppleAuthenticationButton
-                buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-                buttonStyle={
-                  colorScheme === 'dark'
-                    ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
-                    : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
-                }
-                cornerRadius={12}
-                style={styles.appleButton}
-                onPress={handleAppleAuth}
-              />
-            ) : null}
+    <Screen
+      keyboardAvoiding
+      contentStyle={{ ...styles.content, maxWidth: layout.compactContentWidth }}>
+      <Card style={[styles.formCard, { gap: spacing.lg }]}>
+        <View style={styles.brandRow}>
+          <View style={[styles.logoMark, { backgroundColor: colors.accentSoft }]}>
+            <Text variant="label" tone="accent">
+              M
+            </Text>
           </View>
+          <Text variant="heading">Melly</Text>
+        </View>
+
+        <Text variant="bodySmall" tone="secondary">
+          Please enter your details
+        </Text>
+        <Text variant="title">Welcome back</Text>
+
+        <View style={[styles.form, { marginTop: spacing.sm }]}>
+          <TextField
+            placeholder="Email address"
+            autoCapitalize="none"
+            keyboardType="email-address"
+            value={email}
+            onChangeText={setEmail}
+          />
+          <TextField
+            placeholder="Password"
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
+          />
+        </View>
+
+        <View style={styles.rowBetween}>
+          <Pressable onPress={() => setIsSignUp(!isSignUp)}>
+            <Text variant="bodySmall" tone="secondary">
+              {isSignUp ? 'Switch to sign in' : 'Create account'}
+            </Text>
+          </Pressable>
+          <Text variant="bodySmall" tone="accent">
+            Forgot password
+          </Text>
+        </View>
+
+        <Button
+          title={isSignUp ? 'Sign up' : 'Sign in'}
+          onPress={handleEmailAuth}
+          disabled={loading}
+          loading={loading}
+          style={styles.primaryButton}
+        />
+
+        <Button
+          title="Continue with Spotify"
+          onPress={handleSpotifyAuth}
+          loading={loading}
+          variant="secondary"
+          style={styles.secondaryButton}
+        />
+
+        <Text variant="bodySmall" tone="secondary" style={styles.centerText}>
+          {isSignUp ? 'Already have an account?' : "Don't have an account?"}{' '}
+          <Text variant="bodySmall" tone="accent">
+            {isSignUp ? 'Sign in' : 'Sign up'}
+          </Text>
+        </Text>
+        {Platform.OS === 'ios' ? (
+          <AppleAuthentication.AppleAuthenticationButton
+            buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+            buttonStyle={
+              colorScheme === 'dark'
+                ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
+                : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
+            }
+            cornerRadius={radius.md}
+            style={[styles.appleButton, { marginTop: spacing.xs }]}
+            onPress={handleAppleAuth}
+          />
         ) : null}
-      </View>
-    </KeyboardAvoidingView>
+      </Card>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  center: { justifyContent: 'center' },
   content: {
-    flex: 1,
     justifyContent: 'center',
-    padding: 24,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  formCard: { gap: 16, paddingVertical: 34, paddingHorizontal: 28 },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
+    marginBottom: 14,
   },
-  logo: {
-    fontSize: 48,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 32,
-  },
-  spotifyButton: {
+  logoMark: {
+    width: 28,
+    height: 28,
     borderRadius: 12,
-    paddingVertical: 16,
+    borderCurve: 'continuous',
     alignItems: 'center',
-    marginTop: 8,
+    justifyContent: 'center',
   },
-  spotifyButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  otherOptionsText: {
-    textAlign: 'center',
-    fontSize: 14,
-    marginTop: 20,
-    marginBottom: 8,
-  },
+  centerText: { textAlign: 'center', marginTop: 12 },
   form: {
-    gap: 12,
-    marginTop: 8,
+    gap: 16,
+    marginTop: 12,
   },
-  input: {
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-  },
-  secondaryButton: {
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingVertical: 16,
+  rowBetween: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 4,
-  },
-  secondaryButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  switchText: {
-    textAlign: 'center',
-    fontSize: 14,
     marginTop: 8,
+    marginBottom: 6,
   },
+  primaryButton: { marginTop: 6 },
+  secondaryButton: { marginTop: 10 },
   appleButton: {
     width: '100%',
     height: 50,
-    marginTop: 8,
   },
 });

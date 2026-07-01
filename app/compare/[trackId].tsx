@@ -1,18 +1,13 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Alert, StyleSheet, View } from 'react-native';
 
 import { ComparisonPair } from '@/components/ComparisonPair';
+import { useColorScheme } from '@/components/useColorScheme';
+import { LoadingState, Screen, Text } from '@/components/ui';
+import { getTheme } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useImportQueue } from '@/contexts/ImportQueueContext';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/components/useColorScheme';
 import { markOnboardingCompleted } from '@/lib/profile';
 import {
   applyComparison,
@@ -29,7 +24,7 @@ import type { RatingWithTrack, Track } from '@/types';
 export default function CompareScreen() {
   const { trackId } = useLocalSearchParams<{ trackId: string }>();
   const colorScheme = useColorScheme() ?? 'light';
-  const colors = Colors[colorScheme];
+  const { colors } = getTheme(colorScheme);
   const { user } = useAuth();
   const router = useRouter();
   const { isActive, getProgress, advanceToNext, clearQueue } = useImportQueue();
@@ -150,14 +145,7 @@ export default function CompareScreen() {
   );
 
   if (loading || submitting) {
-    return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
-        <ActivityIndicator color={colors.tint} size="large" />
-        {submitting ? (
-          <Text style={[styles.saving, { color: colors.textSecondary }]}>Saving your ranking...</Text>
-        ) : null}
-      </View>
-    );
+    return <LoadingState message={submitting ? 'Saving your ranking...' : undefined} />;
   }
 
   if (!newTrack || rankedList.length === 0) {
@@ -169,17 +157,21 @@ export default function CompareScreen() {
   const estimatedTotal = estimateComparisonCount(rankedList.length);
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <Screen contentStyle={styles.container}>
       <View style={styles.header}>
         {isActive ? (
-          <Text style={[styles.queueProgress, { color: colors.accent }]}>
+          <Text
+            style={[
+              styles.queueProgress,
+              { color: colors.accent, backgroundColor: colors.accentSoft },
+            ]}>
             Ranking song {queueProgress.current} of {queueProgress.total}
           </Text>
         ) : null}
-        <Text style={[styles.progress, { color: colors.textSecondary }]}>
+        <Text variant="bodySmall" tone="secondary" style={styles.progress}>
           {comparisonsMade + 1} of ~{estimatedTotal} comparisons
         </Text>
-        <Text style={[styles.prompt, { color: colors.text }]}>
+        <Text variant="title" style={styles.prompt}>
           Which do you prefer?
         </Text>
       </View>
@@ -190,7 +182,7 @@ export default function CompareScreen() {
         onPreferNew={() => handleChoice(true)}
         onPreferCompare={() => handleChoice(false)}
       />
-    </View>
+    </Screen>
   );
 }
 
@@ -198,34 +190,22 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-  },
   header: {
-    padding: 16,
     paddingTop: 8,
-    gap: 4,
+    gap: 8,
   },
   queueProgress: {
+    alignSelf: 'center',
+    borderRadius: 999,
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '800',
+    overflow: 'hidden',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
     textAlign: 'center',
-    marginBottom: 4,
   },
   progress: {
-    fontSize: 14,
     textAlign: 'center',
   },
-  prompt: {
-    fontSize: 20,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  saving: {
-    fontSize: 15,
-    marginTop: 8,
-  },
+  prompt: { textAlign: 'center' },
 });

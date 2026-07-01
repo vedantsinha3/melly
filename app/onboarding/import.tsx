@@ -5,15 +5,14 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Pressable,
   StyleSheet,
-  Text,
   View,
 } from 'react-native';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useImportQueue } from '@/contexts/ImportQueueContext';
-import { Colors } from '@/constants/theme';
+import { Button, Card, Screen, SectionHeader, Text } from '@/components/ui';
+import { getTheme } from '@/constants/theme';
 import { useColorScheme } from '@/components/useColorScheme';
 import { markOnboardingCompleted } from '@/lib/profile';
 import { hasExistingRating } from '@/lib/ranking';
@@ -31,15 +30,17 @@ const TIME_RANGE_OPTIONS: {
 
 export default function ImportOnboardingScreen() {
   const colorScheme = useColorScheme() ?? 'light';
-  const colors = Colors[colorScheme];
+  const { colors, spacing, elevation } = getTheme(colorScheme);
   const router = useRouter();
-  const { user, getSpotifyAccessToken } = useAuth();
+  const { user, getSpotifyAccessToken, signOut } = useAuth();
   const { startQueue } = useImportQueue();
 
   const [selectedRange, setSelectedRange] = useState<TopTracksTimeRange | null>(null);
   const [tracks, setTracks] = useState<SpotifySearchTrack[]>([]);
   const [loading, setLoading] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleFetchTracks = async (timeRange: TopTracksTimeRange) => {
     if (!user) return;
@@ -47,14 +48,14 @@ export default function ImportOnboardingScreen() {
     setSelectedRange(timeRange);
     setLoading(true);
     setTracks([]);
+    setErrorMessage(null);
+    setStatusMessage('Fetching your Spotify top tracks...');
 
     try {
       const accessToken = await getSpotifyAccessToken();
       if (!accessToken) {
-        Alert.alert(
-          'Spotify session expired',
-          'Please sign out and sign in with Spotify again to import your top tracks.',
-        );
+        setErrorMessage('Spotify did not return an access token. Sign out and sign in with Spotify again.');
+        setStatusMessage(null);
         return;
       }
 
@@ -71,13 +72,17 @@ export default function ImportOnboardingScreen() {
       setTracks(unrated);
 
       if (unrated.length === 0) {
-        Alert.alert(
-          'Nothing new to import',
-          'All your top tracks are already in your ranked list.',
+        setStatusMessage(
+          topTracks.length === 0
+            ? 'Spotify did not return any top tracks for this range yet. Try the other range or add songs manually.'
+            : 'All your top tracks from this range are already in your ranked list.',
         );
+      } else {
+        setStatusMessage(null);
       }
     } catch (error) {
-      Alert.alert('Import failed', error instanceof Error ? error.message : 'Could not fetch tracks');
+      setErrorMessage(error instanceof Error ? error.message : 'Could not fetch tracks');
+      setStatusMessage(null);
     } finally {
       setLoading(false);
     }
@@ -113,47 +118,61 @@ export default function ImportOnboardingScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.text }]}>Get started fast</Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          Import your most-played Spotify tracks and rank them one by one.
-        </Text>
-      </View>
+    <Screen contentStyle={styles.content}>
+      <SectionHeader
+        title="Get started fast"
+        subtitle="Import your most-played Spotify tracks and rank them one by one."
+      />
 
       <View style={styles.rangeRow}>
         {TIME_RANGE_OPTIONS.map((option) => {
           const isSelected = selectedRange === option.value;
           return (
-            <Pressable
+            <Button
               key={option.value}
               onPress={() => handleFetchTracks(option.value)}
-              style={[
-                styles.rangeCard,
-                {
-                  backgroundColor: isSelected ? colors.surface : colors.background,
-                  borderColor: isSelected ? colors.accent : colors.border,
-                },
-              ]}>
-              <Text style={[styles.rangeLabel, { color: colors.text }]}>{option.label}</Text>
-              <Text style={[styles.rangeDescription, { color: colors.textSecondary }]}>
-                {option.description}
-              </Text>
-            </Pressable>
+              disabled={loading}
+              variant={isSelected ? 'primary' : 'secondary'}
+              title={option.label}
+              style={styles.rangeCard}
+            />
           );
         })}
       </View>
+      {selectedRange ? (
+        <Text variant="caption" tone="secondary" style={styles.rangeDescription}>
+          {TIME_RANGE_OPTIONS.find((item) => item.value === selectedRange)?.description}
+        </Text>
+      ) : null}
 
       {loading ? (
         <ActivityIndicator style={styles.loader} color={colors.tint} />
       ) : null}
 
+      {statusMessage ? (
+        <Text style={[styles.statusText, { color: colors.textSecondary }]}>
+          {statusMessage}
+        </Text>
+      ) : null}
+
+      {errorMessage ? (
+        <Card style={[styles.messageBox, { borderColor: colors.error, boxShadow: 'none', elevation: 0 }]}>
+          <Text variant="label" tone="error">Import failed</Text>
+          <Text variant="bodySmall" tone="secondary">
+            {errorMessage}
+          </Text>
+          {errorMessage.includes('access token') ? (
+            <Button title="Sign in with Spotify again" variant="secondary" onPress={signOut} />
+          ) : null}
+        </Card>
+      ) : null}
+
       {!loading && tracks.length > 0 ? (
         <>
-          <Text style={[styles.previewTitle, { color: colors.text }]}>
+          <Text variant="heading">
             {tracks.length} songs to rank
           </Text>
-          <Text style={[styles.previewHint, { color: colors.textSecondary }]}>
+          <Text variant="bodySmall" tone="secondary">
             About 3–5 comparisons per song
           </Text>
           <FlatList
@@ -181,77 +200,47 @@ export default function ImportOnboardingScreen() {
               </View>
             )}
           />
-          <Pressable
-            style={[styles.primaryButton, { backgroundColor: colors.accent }]}
-            onPress={handleStartRanking}
-            disabled={starting}>
-            {starting ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.primaryButtonText}>Start ranking</Text>
-            )}
-          </Pressable>
+          <Button title="Start ranking" onPress={handleStartRanking} loading={starting} />
         </>
       ) : null}
 
-      <Pressable style={styles.skipButton} onPress={handleSkip}>
-        <Text style={[styles.skipText, { color: colors.textSecondary }]}>
-          I&apos;ll add songs manually
-        </Text>
-      </Pressable>
-    </View>
+      <Button title="I&apos;ll add songs manually" variant="ghost" onPress={handleSkip} />
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  content: {
     flex: 1,
-    padding: 20,
-  },
-  header: {
-    marginTop: 24,
-    marginBottom: 24,
-    gap: 8,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '800',
-  },
-  subtitle: {
-    fontSize: 16,
-    lineHeight: 22,
+    width: '100%',
+    maxWidth: 980,
+    alignSelf: 'center',
   },
   rangeRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
     marginBottom: 16,
   },
   rangeCard: {
     flex: 1,
-    borderWidth: 2,
-    borderRadius: 12,
-    padding: 14,
-    gap: 6,
-  },
-  rangeLabel: {
-    fontSize: 16,
-    fontWeight: '700',
+    minHeight: 56,
   },
   rangeDescription: {
-    fontSize: 13,
-    lineHeight: 18,
+    marginTop: -8,
+    marginBottom: 8,
   },
   loader: {
     marginTop: 24,
   },
-  previewTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginTop: 8,
-  },
-  previewHint: {
+  statusText: {
     fontSize: 14,
-    marginBottom: 12,
+    lineHeight: 20,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  messageBox: {
+    marginTop: 12,
+    gap: 6,
   },
   list: {
     flex: 1,
@@ -286,23 +275,5 @@ const styles = StyleSheet.create({
   },
   trackArtist: {
     fontSize: 13,
-  },
-  primaryButton: {
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  primaryButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  skipButton: {
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  skipText: {
-    fontSize: 14,
   },
 });
