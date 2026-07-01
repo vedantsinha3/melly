@@ -26,7 +26,6 @@ export function PreviewPlayer({ previewUrl }: Props) {
   if (!previewUrl) {
     return (
       <Text variant="bodySmall" tone="secondary" style={styles.unavailable}>
-        No preview available
       </Text>
     );
   }
