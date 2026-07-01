@@ -143,9 +143,22 @@ export async function getUserTopTracks(
 }
 
 export async function upsertTrack(track: Track): Promise<void> {
-  const { error } = await supabase.from('tracks').upsert(track, {
-    onConflict: 'spotify_id',
-  });
+  const { data: existing, error: lookupError } = await supabase
+    .from('tracks')
+    .select('spotify_id')
+    .eq('spotify_id', track.spotify_id)
+    .maybeSingle();
 
-  if (error) throw error;
+  if (lookupError) throw lookupError;
+  if (existing) return;
+
+  const { error: insertError } = await supabase.from('tracks').insert(track);
+  if (insertError) {
+    const message = insertError.message.toLowerCase();
+    if (message.includes('duplicate key')) {
+      // Another client inserted first; treat as success.
+      return;
+    }
+    throw insertError;
+  }
 }

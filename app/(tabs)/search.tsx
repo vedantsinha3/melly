@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Alert,
   NativeSyntheticEvent,
+  Platform,
   ScrollView,
   StyleSheet,
   TextInputKeyPressEventData,
@@ -21,10 +22,13 @@ import { getTheme } from '@/constants/theme';
 import { useColorScheme } from '@/components/useColorScheme';
 import {
   buildLibrarySearchViewModel,
+  buildRankedTrackIndex,
+  findRankedMatch,
   flattenSearchResults,
   type LibrarySearchViewModel,
   type SelectableSearchResult,
 } from '@/lib/librarySearch';
+import { openCompareFlow } from '@/lib/navigation';
 import {
   buildLogSongFeed,
   buildRankingProgress,
@@ -44,6 +48,13 @@ export default function SearchScreen() {
   const { user, isSpotifyUser, getSpotifyAccessToken, loading: authLoading } = useAuth();
   const { isActive, getCurrentTrackId, getProgress } = useImportQueue();
   const router = useRouter();
+
+  function blurSearchField() {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const active = document.activeElement as HTMLElement | null;
+      active?.blur?.();
+    }
+  }
 
   const [query, setQuery] = useState('');
   const [searchModel, setSearchModel] = useState<LibrarySearchViewModel>(EMPTY_SEARCH);
@@ -150,6 +161,8 @@ export default function SearchScreen() {
     async (item: SpotifySearchTrack | Track) => {
       if (!user) return;
 
+      blurSearchField();
+
       const spotifyId = 'spotify_id' in item ? item.spotify_id : item.id;
       if (!spotifyId) {
         Alert.alert('Error', 'This track is missing a Spotify ID and cannot be ranked.');
@@ -160,15 +173,41 @@ export default function SearchScreen() {
 
       try {
         const track = 'spotify_id' in item ? item : spotifyTrackToTrack(item);
+        const spotifyShape: Pick<SpotifySearchTrack, 'id' | 'name' | 'artists' | 'album'> =
+          'spotify_id' in item
+            ? {
+                id: item.spotify_id,
+                name: item.name,
+                artists: item.artist_names.map((name) => ({ name })),
+                album: { name: item.album_name, images: [] },
+              }
+            : {
+                id: item.id,
+                name: item.name,
+                artists: item.artists,
+                album: item.album,
+              };
+
+        const fuzzyMatch = findRankedMatch(spotifyShape, buildRankedTrackIndex(rankedRatings));
+        if (fuzzyMatch) {
+          openRankedSong(fuzzyMatch.id);
+          return;
+        }
+
         await upsertTrack(track);
 
         const exists = await hasExistingRating(user.id, track.spotify_id);
         if (exists) {
-          let existing = rankedRatings.find((rating) => rating.track.spotify_id === track.spotify_id);
+          let existing: RatingWithTrack | undefined = rankedRatings.find(
+            (rating) => rating.track.spotify_id === track.spotify_id,
+          );
           if (!existing) {
             const fresh = await fetchRankedRatings(user.id);
             setRankedRatings(fresh);
-            existing = fresh.find((rating) => rating.track.spotify_id === track.spotify_id);
+            existing =
+              fresh.find((rating) => rating.track.spotify_id === track.spotify_id) ??
+              findRankedMatch(spotifyShape, buildRankedTrackIndex(fresh)) ??
+              undefined;
           }
           if (existing) {
             openRankedSong(existing.id);
@@ -179,7 +218,7 @@ export default function SearchScreen() {
           return;
         }
 
-        router.replace(`/compare/${track.spotify_id}`);
+        openCompareFlow(router, track.spotify_id);
       } catch (error) {
         Alert.alert('Error', error instanceof Error ? error.message : 'Failed to start ranking');
       } finally {

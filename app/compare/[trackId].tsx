@@ -52,7 +52,7 @@ type PlacementContext = {
 };
 
 export default function CompareScreen() {
-  const { trackId } = useLocalSearchParams<{ trackId: string }>();
+  const { trackId, ts } = useLocalSearchParams<{ trackId: string; ts?: string }>();
   const colorScheme = useColorScheme() ?? 'light';
   const { colors, spacing } = getTheme(colorScheme);
   const { user } = useAuth();
@@ -130,7 +130,7 @@ export default function CompareScreen() {
       setLoading(false);
       setSubmitting(false);
     }
-  }, [user, trackId, handleQueueAdvance]);
+  }, [user, trackId, ts, handleQueueAdvance]);
 
   useEffect(() => {
     loadData();
