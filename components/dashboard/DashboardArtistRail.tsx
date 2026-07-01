@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, useWindowDimensions, View, type ViewStyle } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { Card, Text } from '@/components/ui';
@@ -21,6 +21,19 @@ type Props = {
 };
 
 const CARD_SIZE = 148;
+
+const SCRIM_GRADIENT =
+  'linear-gradient(to top, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.45) 45%, transparent 100%)';
+
+function scrimStyle(borderRadius: number): ViewStyle {
+  const base: ViewStyle = {
+    borderRadius,
+    ...(Platform.OS === 'web'
+      ? { backgroundImage: SCRIM_GRADIENT }
+      : { experimental_backgroundImage: SCRIM_GRADIENT }),
+  };
+  return base;
+}
 
 function ArtistCard({ artist, index, size, onPress }: { artist: Artist; index: number; size?: number; onPress: () => void }) {
   const colorScheme = useColorScheme() ?? 'light';
@@ -55,7 +68,7 @@ function ArtistCard({ artist, index, size, onPress }: { artist: Artist; index: n
             </Text>
           </View>
         )}
-        <View style={[styles.scrim, { borderRadius: radius.lg }]} />
+        <View style={[styles.scrim, scrimStyle(radius.lg)]} />
         <View style={styles.meta}>
           <Text variant="label" numberOfLines={1} style={styles.artistName}>
             {artist.name}
@@ -166,8 +179,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    height: '58%',
-    backgroundColor: 'rgba(0,0,0,0.52)',
+    height: '34%',
   },
   meta: {
     position: 'absolute',

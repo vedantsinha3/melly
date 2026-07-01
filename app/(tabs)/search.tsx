@@ -13,7 +13,7 @@ import { LogSongProgressBanner } from '@/components/log-song/LogSongProgressBann
 import { TrackFeedCard } from '@/components/log-song/TrackFeedCard';
 import { TrackFeedSection } from '@/components/log-song/TrackFeedSection';
 import { SongCard } from '@/components/SongCard';
-import { Screen, Text, TextField } from '@/components/ui';
+import { Screen, Text, TextField, wideScrollContentStyle } from '@/components/ui';
 import { useAuth } from '@/contexts/AuthContext';
 import { useImportQueue } from '@/contexts/ImportQueueContext';
 import { getTheme } from '@/constants/theme';
@@ -188,7 +188,8 @@ export default function SearchScreen() {
   return (
     <Screen edgeToEdge wide contentStyle={styles.container}>
       <ScrollView
-        contentContainerStyle={[styles.content, { gap: spacing.lg, paddingBottom: spacing['2xl'] }]}
+        style={styles.scroll}
+        contentContainerStyle={[wideScrollContentStyle(), styles.content, { gap: spacing.lg, paddingBottom: spacing['2xl'] }]}
         keyboardShouldPersistTaps="handled">
         <LogSongProgressBanner
           headline={progress.headline}
@@ -291,6 +292,10 @@ export default function SearchScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  scroll: {
+    flex: 1,
+    width: '100%',
   },
   content: {
     flexGrow: 1,

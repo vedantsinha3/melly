@@ -18,7 +18,7 @@ import {
   DashboardToolbar,
 } from '@/components/dashboard';
 import { RankedListItem } from '@/components/RankedListItem';
-import { EmptyState, LoadingState, Screen, Text } from '@/components/ui';
+import { EmptyState, LoadingState, Screen, Text, wideScrollContentStyle } from '@/components/ui';
 import { useAuth } from '@/contexts/AuthContext';
 import { useImportQueue } from '@/contexts/ImportQueueContext';
 import { getTheme, layout } from '@/constants/theme';
@@ -186,7 +186,12 @@ export default function RankedListScreen() {
   return (
     <Screen edgeToEdge wide contentStyle={styles.container}>
       <ScrollView
-        contentContainerStyle={[styles.dashboardContent, { gap: spacing.sm, paddingBottom: spacing.xl }]}
+        style={styles.scroll}
+        contentContainerStyle={[
+          wideScrollContentStyle(),
+          styles.dashboardContent,
+          { gap: spacing.sm, paddingBottom: spacing.xl },
+        ]}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />
         }>
@@ -254,6 +259,10 @@ export default function RankedListScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  scroll: {
+    flex: 1,
+    width: '100%',
   },
   dashboardContent: {
     flexGrow: 1,

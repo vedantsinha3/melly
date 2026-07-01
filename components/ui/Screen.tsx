@@ -1,7 +1,7 @@
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { getTheme } from '@/constants/theme';
+import { getTheme, layout, spacing as themeSpacing } from '@/constants/theme';
 import { useColorScheme } from '@/components/useColorScheme';
 
 type Props = {
@@ -17,6 +17,17 @@ type Props = {
   omitSafeArea?: boolean;
 };
 
+/** Centered max-width container for scroll content inside a full-width ScrollView. */
+export function wideScrollContentStyle(): ViewStyle {
+  return {
+    width: '100%',
+    maxWidth: layout.maxContentWidth,
+    alignSelf: 'center',
+    paddingHorizontal: themeSpacing.lg,
+    paddingTop: themeSpacing.sm,
+  };
+}
+
 export function Screen({
   children,
   scroll,
@@ -27,23 +38,28 @@ export function Screen({
   omitSafeArea,
 }: Props) {
   const colorScheme = useColorScheme();
-  const { colors, layout, spacing } = getTheme(colorScheme);
+  const { colors, layout: layoutTokens, spacing } = getTheme(colorScheme);
+
+  const wideContent = wide && edgeToEdge ? wideScrollContentStyle() : null;
 
   const shellStyle = [
     styles.content,
     edgeToEdge
-      ? {
-          paddingHorizontal: spacing.lg,
-          paddingTop: spacing.sm,
-          maxWidth: wide ? layout.maxContentWidth : undefined,
-          alignSelf: wide ? ('center' as const) : undefined,
-          width: wide ? ('100%' as const) : undefined,
-        }
-      : { maxWidth: layout.maxContentWidth, padding: layout.screenPadding },
+      ? wide
+        ? styles.fullWidthShell
+        : {
+            paddingHorizontal: spacing.lg,
+            paddingTop: spacing.sm,
+          }
+      : { maxWidth: layoutTokens.maxContentWidth, padding: layoutTokens.screenPadding },
   ];
 
   const inner = scroll ? (
-    <ScrollView contentContainerStyle={[shellStyle, contentStyle]}>{children}</ScrollView>
+    <ScrollView
+      style={wide && edgeToEdge ? styles.fullWidthScroll : undefined}
+      contentContainerStyle={[wideContent ?? shellStyle, contentStyle]}>
+      {children}
+    </ScrollView>
   ) : (
     <View style={[shellStyle, contentStyle]}>{children}</View>
   );
@@ -86,6 +102,14 @@ const styles = StyleSheet.create({
   },
   flex: {
     flex: 1,
+  },
+  fullWidthScroll: {
+    flex: 1,
+    width: '100%',
+  },
+  fullWidthShell: {
+    flex: 1,
+    width: '100%',
   },
   content: {
     flexGrow: 1,
