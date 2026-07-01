@@ -32,7 +32,7 @@ import type { SpotifySearchTrack, Track } from '@/types';
 export default function SearchScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const { colors, spacing } = getTheme(colorScheme);
-  const { user, isSpotifyUser, getSpotifyAccessToken } = useAuth();
+  const { user, isSpotifyUser, getSpotifyAccessToken, loading: authLoading } = useAuth();
   const { isActive, getCurrentTrackId, getProgress } = useImportQueue();
   const router = useRouter();
 
@@ -47,14 +47,17 @@ export default function SearchScreen() {
   const [feedLoading, setFeedLoading] = useState(true);
   const [highlightId, setHighlightId] = useState<string | null>(null);
 
+  const [feedError, setFeedError] = useState<string | null>(null);
+
   const hasQuery = query.trim().length > 2;
   const progress = useMemo(() => buildRankingProgress(rankedCount), [rankedCount]);
   const queueProgress = getProgress();
 
   const loadFeed = useCallback(async () => {
-    if (!user) return;
+    if (!user || authLoading) return;
 
     setFeedLoading(true);
+    setFeedError(null);
     try {
       const ratings = await fetchRankedRatings(user.id);
       const ids = new Set(ratings.map((rating) => rating.track.spotify_id));
@@ -79,21 +82,26 @@ export default function SearchScreen() {
           setHighlightId(next);
           return;
         }
+
+        setFeedError('Spotify session expired. Sign out and sign in with Spotify again to restore suggestions.');
       }
 
       setSections([]);
       setHighlightId(null);
     } catch (error) {
       console.error(error);
+      setFeedError(error instanceof Error ? error.message : 'Failed to load suggestions');
     } finally {
       setFeedLoading(false);
     }
-  }, [user, isSpotifyUser, getSpotifyAccessToken, isActive, getCurrentTrackId]);
+  }, [user, authLoading, isSpotifyUser, getSpotifyAccessToken, isActive, getCurrentTrackId]);
 
   useFocusEffect(
     useCallback(() => {
-      loadFeed();
-    }, [loadFeed]),
+      if (!authLoading) {
+        loadFeed();
+      }
+    }, [loadFeed, authLoading]),
   );
 
   useEffect(() => {
@@ -257,6 +265,13 @@ export default function SearchScreen() {
                     }}
                   />
                 ))}
+                {feedError ? (
+                  <View style={[styles.connectHint, { backgroundColor: colors.surfaceMuted, borderRadius: 12 }]}>
+                    <Text variant="bodySmall" tone="secondary">
+                      {feedError}
+                    </Text>
+                  </View>
+                ) : null}
                 {!isSpotifyUser ? (
                   <View style={[styles.connectHint, { backgroundColor: colors.surfaceMuted, borderRadius: 12 }]}>
                     <Text variant="bodySmall" tone="secondary">

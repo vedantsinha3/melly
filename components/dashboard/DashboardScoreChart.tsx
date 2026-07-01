@@ -12,6 +12,7 @@ import { TasteProfileSummary } from '@/components/dashboard/TasteProfileSummary'
 import { getTheme } from '@/constants/theme';
 import { useColorScheme } from '@/components/useColorScheme';
 import {
+  getHistogramChartMaxPct,
   getScoreBarColor,
   type HistogramBucket,
   type TasteProfileModule,
@@ -24,17 +25,17 @@ type Props = {
   lowData: boolean;
 };
 
-const CHART_HEIGHT = 150;
+const CHART_HEIGHT = 220;
 
 function AnimatedBar({
   bucket,
-  maxCount,
   chartHeight,
+  chartMaxPct,
   index,
 }: {
   bucket: HistogramBucket;
-  maxCount: number;
   chartHeight: number;
+  chartMaxPct: number;
   index: number;
 }) {
   const colorScheme = useColorScheme() ?? 'light';
@@ -42,11 +43,11 @@ function AnimatedBar({
   const progress = useSharedValue(0);
   const fill = getScoreBarColor(bucket.rating, colorScheme);
   const target =
-    bucket.count === 0 ? 0 : Math.max(bucket.count / maxCount, bucket.count > 0 ? 0.05 : 0);
+    bucket.pct === 0 ? 0 : Math.max((bucket.pct / chartMaxPct) * 0.94, 0.06);
 
   useEffect(() => {
     progress.value = withDelay(index * 40, withTiming(target, { duration: 600 }));
-  }, [bucket.count, maxCount, index, progress, target]);
+  }, [bucket.pct, chartMaxPct, index, progress, target]);
 
   const barStyle = useAnimatedStyle(() => ({
     height: progress.value * chartHeight,
@@ -105,7 +106,7 @@ export function DashboardScoreChart({
 }: Props) {
   const colorScheme = useColorScheme() ?? 'light';
   const { colors, spacing } = getTheme(colorScheme);
-  const maxCount = Math.max(...histogram.map((bucket) => bucket.count), 1);
+  const chartMaxPct = getHistogramChartMaxPct(histogram);
 
   return (
     <Card tone="inset" padded style={[styles.card, { flex: 1, padding: spacing.md }]}>
@@ -129,8 +130,8 @@ export function DashboardScoreChart({
                 <AnimatedBar
                   key={bucket.rating}
                   bucket={bucket}
-                  maxCount={maxCount}
                   chartHeight={CHART_HEIGHT}
+                  chartMaxPct={chartMaxPct}
                   index={index}
                 />
               ))}
@@ -146,7 +147,7 @@ export function DashboardScoreChart({
 
 const styles = StyleSheet.create({
   card: {
-    minHeight: 300,
+    minHeight: 360,
   },
   title: {
     marginBottom: 4,

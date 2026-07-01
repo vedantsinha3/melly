@@ -18,6 +18,7 @@ import { getTheme } from '@/constants/theme';
 import { useColorScheme } from '@/components/useColorScheme';
 import {
   brightenHexColor,
+  getHistogramChartMaxPct,
   getScoreBarColor,
   type HistogramBucket,
   type TasteProfileModule,
@@ -38,7 +39,7 @@ type BarShapeProps = RectangleProps & {
   index?: number;
 };
 
-const CHART_HEIGHT = 236;
+const CHART_HEIGHT = 300;
 
 function HistogramTooltip(props: TooltipContentProps<number, string>) {
   const { active, payload } = props;
@@ -64,11 +65,13 @@ function HistogramTooltip(props: TooltipContentProps<number, string>) {
         Rating {row.rating}
       </Text>
       <Text variant="caption" tone="secondary">
-        {row.count} {row.count === 1 ? 'song' : 'songs'}
-      </Text>
-      <Text variant="caption" tone="tertiary">
         {row.pct.toFixed(1)}% of library
       </Text>
+      {row.count > 0 ? (
+        <Text variant="caption" tone="tertiary">
+          {row.count} {row.count === 1 ? 'song' : 'songs'}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -152,6 +155,8 @@ export function DashboardScoreChart({
     [histogram, colorScheme],
   );
 
+  const chartMaxPct = useMemo(() => getHistogramChartMaxPct(histogram), [histogram]);
+
   return (
     <Card tone="inset" padded style={[styles.card, { flex: 1, padding: spacing.md }]}>
       <Text variant="heading" style={styles.title}>
@@ -183,7 +188,7 @@ export function DashboardScoreChart({
                     dy={5}
                     allowDecimals={false}
                   />
-                  <YAxis hide domain={[0, 'dataMax']} />
+                  <YAxis hide domain={[0, chartMaxPct]} />
                   <ReferenceLine y={0} stroke={colors.separator} strokeWidth={1} />
                   {averageScore > 0 ? (
                     <ReferenceLine
@@ -212,7 +217,7 @@ export function DashboardScoreChart({
                     wrapperStyle={{ outline: 'none', transition: 'opacity 180ms ease-out' }}
                   />
                   <Bar
-                    dataKey="count"
+                    dataKey="pct"
                     isAnimationActive={false}
                     onMouseEnter={(_state, index) => {
                       const row = data[index];
@@ -249,7 +254,7 @@ export function DashboardScoreChart({
 
 const styles = StyleSheet.create({
   card: {
-    minHeight: 300,
+    minHeight: 360,
   },
   title: {
     marginBottom: 4,

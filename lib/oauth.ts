@@ -3,6 +3,7 @@ import { makeRedirectUri } from 'expo-auth-session';
 import { Platform } from 'react-native';
 
 import { supabase } from '@/lib/supabase';
+import { saveSpotifyTokens } from '@/lib/spotifyAuthStorage';
 
 export function getOAuthRedirectUri(): string {
   return makeRedirectUri({
@@ -41,6 +42,11 @@ export async function createSessionFromOAuthUrl(url: string) {
   });
 
   if (sessionError) throw sessionError;
+
+  if (data.session && provider_token) {
+    await saveSpotifyTokens(provider_token, provider_refresh_token ?? null);
+  }
+
   return data.session
     ? {
         ...data.session,

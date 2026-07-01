@@ -218,6 +218,12 @@ export function buildScoreHistogram(ratings: Array<{ score: number | string }>):
   }));
 }
 
+/** Y-axis ceiling for the distribution chart — scales bars to the data peak. */
+export function getHistogramChartMaxPct(histogram: HistogramBucket[]): number {
+  const peak = histogram.reduce((max, bucket) => Math.max(max, bucket.pct), 0);
+  return Math.max(peak * 1.1, 8);
+}
+
 function computeMedian(scores: number[]): number {
   if (scores.length === 0) return 0;
   const sorted = [...scores].sort((a, b) => a - b);

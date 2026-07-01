@@ -15,6 +15,12 @@ import {
   startSpotifyOAuth,
 } from '@/lib/oauth';
 import { confirmDestructive } from '@/lib/confirm';
+import {
+  clearSpotifyTokens,
+  getStoredSpotifyAccessToken,
+  hydrateSpotifyTokensFromSession,
+  saveSpotifyTokens,
+} from '@/lib/spotifyAuthStorage';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -52,18 +58,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+    supabase.auth.getSession().then(async ({ data: { session: currentSession } }) => {
       setSession(currentSession);
-      setSpotifyAccessToken(currentSession?.provider_token ?? null);
+      const token = await hydrateSpotifyTokensFromSession(currentSession);
+      setSpotifyAccessToken(token);
       setLoading(false);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((event, newSession) => {
+    const { data: listener } = supabase.auth.onAuthStateChange(async (event, newSession) => {
       setSession(newSession);
-      setSpotifyAccessToken((currentToken) => {
-        if (event === 'SIGNED_OUT' || !newSession) return null;
-        return newSession.provider_token ?? currentToken;
-      });
+      if (event === 'SIGNED_OUT' || !newSession) {
+        setSpotifyAccessToken(null);
+        await clearSpotifyTokens();
+        return;
+      }
+
+      if (newSession.provider_token) {
+        await saveSpotifyTokens(
+          newSession.provider_token,
+          newSession.provider_refresh_token ?? null,
+        );
+        setSpotifyAccessToken(newSession.provider_token);
+        return;
+      }
+
+      setSpotifyAccessToken((currentToken) => currentToken ?? null);
     });
 
     return () => listener.subscription.unsubscribe();
@@ -85,7 +104,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const newSession = await createSessionFromOAuthUrl(url);
         if (newSession) {
           setSession(newSession);
-          setSpotifyAccessToken(newSession.provider_token ?? null);
+          const token = await hydrateSpotifyTokensFromSession(newSession);
+          setSpotifyAccessToken(token);
           clearOAuthCallbackFromUrl();
           return;
         }
@@ -166,16 +186,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return spotifyAccessToken;
     }
 
-    const { data: { session: currentSession } } = await supabase.auth.getSession();
+    const storedToken = await getStoredSpotifyAccessToken();
+    if (storedToken) {
+      setSpotifyAccessToken(storedToken);
+      return storedToken;
+    }
+
+    const {
+      data: { session: currentSession },
+    } = await supabase.auth.getSession();
     if (currentSession?.provider_token) {
+      await saveSpotifyTokens(
+        currentSession.provider_token,
+        currentSession.provider_refresh_token ?? null,
+      );
       setSpotifyAccessToken(currentSession.provider_token);
       return currentSession.provider_token;
     }
 
-    const { data: { session: refreshedSession } } = await supabase.auth.refreshSession();
-    const refreshedProviderToken = refreshedSession?.provider_token ?? null;
-    setSpotifyAccessToken(refreshedProviderToken);
-    return refreshedProviderToken;
+    const {
+      data: { session: refreshedSession },
+    } = await supabase.auth.refreshSession();
+    if (refreshedSession?.provider_token) {
+      await saveSpotifyTokens(
+        refreshedSession.provider_token,
+        refreshedSession.provider_refresh_token ?? null,
+      );
+      setSpotifyAccessToken(refreshedSession.provider_token);
+      return refreshedSession.provider_token;
+    }
+
+    return getStoredSpotifyAccessToken();
   };
 
   const signOut = async () => {
@@ -187,6 +228,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setSession(null);
     setSpotifyAccessToken(null);
+    await clearSpotifyTokens();
   };
 
   const requestSignOut = () => {

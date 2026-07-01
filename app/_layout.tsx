@@ -86,8 +86,9 @@ function OnboardingGate({ children }: { children: React.ReactNode }) {
       const inAuth = rootSegment === '(auth)';
       const inOnboarding = rootSegment === 'onboarding';
       const inCompare = rootSegment === 'compare';
+      const inArtist = rootSegment === 'artist';
 
-      if (inAuth || inOnboarding || inCompare) {
+      if (inAuth || inOnboarding || inCompare || inArtist) {
         setChecking(false);
         return;
       }
@@ -165,6 +166,17 @@ function RootLayoutNav() {
             <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+            <Stack.Screen
+              name="artist/[artistName]"
+              options={{
+                title: 'Artist',
+                headerLargeTitle: false,
+                headerShadowVisible: false,
+                headerStyle: { backgroundColor: colors.background },
+                headerTintColor: colors.text,
+                headerTitleStyle: { fontWeight: '600', fontSize: 17 },
+              }}
+            />
             <Stack.Screen
               name="compare/[trackId]"
               options={{

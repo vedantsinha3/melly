@@ -1,4 +1,5 @@
 import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 import { Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
@@ -21,7 +22,7 @@ type Props = {
 
 const CARD_SIZE = 148;
 
-function ArtistCard({ artist, index, size }: { artist: Artist; index: number; size?: number }) {
+function ArtistCard({ artist, index, size, onPress }: { artist: Artist; index: number; size?: number; onPress: () => void }) {
   const colorScheme = useColorScheme() ?? 'light';
   const { colors, radius, motion } = getTheme(colorScheme);
   const dimensionStyle = size ? { width: size, height: size } : styles.fill;
@@ -29,6 +30,9 @@ function ArtistCard({ artist, index, size }: { artist: Artist; index: number; si
   return (
     <Animated.View entering={FadeInDown.delay(index * 55).duration(260).springify().damping(20)} style={size ? undefined : styles.fill}>
       <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`View ${artist.name} taste profile`}
         style={({ pressed, hovered }) => [
           styles.card,
           dimensionStyle,
@@ -74,6 +78,7 @@ export function DashboardArtistRail({ artists, lowData, expanded = false }: Prop
   const colorScheme = useColorScheme() ?? 'light';
   const { spacing } = getTheme(colorScheme);
   const { width } = useWindowDimensions();
+  const router = useRouter();
   const isWide = width >= layout.breakpointWide;
 
   const useGrid = expanded && isWide && artists.length > 0;
@@ -102,10 +107,20 @@ export function DashboardArtistRail({ artists, lowData, expanded = false }: Prop
           {artists.map((artist, index) =>
             useGrid ? (
               <View key={artist.name} style={styles.gridCell}>
-                <ArtistCard artist={artist} index={index} />
+                <ArtistCard
+                  artist={artist}
+                  index={index}
+                  onPress={() => router.push(`/artist/${encodeURIComponent(artist.name)}`)}
+                />
               </View>
             ) : (
-              <ArtistCard key={artist.name} artist={artist} index={index} size={CARD_SIZE} />
+              <ArtistCard
+                key={artist.name}
+                artist={artist}
+                index={index}
+                size={CARD_SIZE}
+                onPress={() => router.push(`/artist/${encodeURIComponent(artist.name)}`)}
+              />
             ),
           )}
         </View>
