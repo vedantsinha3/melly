@@ -18,7 +18,6 @@ const SORT_OPTIONS: { value: ArtistSortMode; label: string }[] = [
   { value: 'highest', label: 'Highest rated' },
   { value: 'lowest', label: 'Lowest rated' },
   { value: 'recent', label: 'Recently ranked' },
-  { value: 'rank', label: 'Ranking order' },
 ];
 
 export function ArtistSongList({ songs, sortMode, onSortChange, onSongPress }: Props) {
