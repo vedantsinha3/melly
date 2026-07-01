@@ -36,6 +36,12 @@ const NAV_ITEMS = [
     href: '/(tabs)/library' as const,
     icon: { ios: 'music.note.list', android: 'library_music', web: 'library_music' } as const,
   },
+  {
+    key: 'import',
+    label: 'Quick start',
+    href: '/(tabs)/import' as const,
+    icon: { ios: 'paperplane.fill', android: 'rocket_launch', web: 'rocket_launch' } as const,
+  },
 ] as const;
 
 function isActiveRoute(pathname: string, href: string) {
@@ -45,7 +51,10 @@ function isActiveRoute(pathname: string, href: string) {
   if (href === '/(tabs)/search') {
     return pathname.includes('/search');
   }
-  return pathname.includes('/library');
+  if (href === '/(tabs)/library') {
+    return pathname.includes('/library');
+  }
+  return pathname.includes('/import');
 }
 
 type Props = {

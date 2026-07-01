@@ -89,8 +89,9 @@ function OnboardingGate({ children }: { children: React.ReactNode }) {
       const inArtist = rootSegment === 'artist';
       const inAlbum = rootSegment === 'album';
       const inSong = rootSegment === 'song';
+      const inTabbedImport = rootSegment === '(tabs)' && segments[1] === 'import';
 
-      if (inAuth || inOnboarding || inCompare || inArtist || inAlbum || inSong) {
+      if (inAuth || inOnboarding || inCompare || inArtist || inAlbum || inSong || inTabbedImport) {
         setChecking(false);
         return;
       }
@@ -104,7 +105,7 @@ function OnboardingGate({ children }: { children: React.ReactNode }) {
 
         const ratings = await fetchRankedRatings(user.id);
         if (ratings.length === 0) {
-          router.replace('/onboarding/import' as '/(tabs)');
+          router.replace('/(tabs)/import');
         }
       } catch (error) {
         console.error(error);

@@ -1,4 +1,4 @@
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import {
     RefreshControl,
@@ -55,9 +55,8 @@ export default function RankedListScreen() {
   const { width } = useWindowDimensions();
   const isWide = width >= layout.breakpointWide;
   const { user, requestSignOut, isSpotifyUser } = useAuth();
-  const { getCurrentTrackId, getProgress, isActive } = useImportQueue();
+  const { getProgress, isActive } = useImportQueue();
   const router = useRouter();
-  const { highlight } = useLocalSearchParams<{ highlight?: string }>();
 
   const [ratings, setRatings] = useState<RatingWithTrack[]>([]);
   const [loading, setLoading] = useState(true);
@@ -103,35 +102,6 @@ export default function RankedListScreen() {
   const lowData = ratings.length < 3;
   const queueActive = dashboard.rankingHealth.queueProgress.isActive;
 
-  const primaryLabel = queueActive
-    ? 'Continue ranking'
-    : ratings.length === 0
-      ? isSpotifyUser
-        ? 'Import tracks'
-        : 'Log your first song'
-      : 'Log a song';
-
-  const handlePrimaryAction = () => {
-    if (ratings.length === 0 && isSpotifyUser) {
-      router.push('/onboarding/import');
-      return;
-    }
-    if (queueActive) {
-      handleContinueRanking();
-      return;
-    }
-    router.push('/(tabs)/search');
-  };
-
-  const handleContinueRanking = () => {
-    const trackId = getCurrentTrackId();
-    if (trackId) {
-      router.push(`/compare/${trackId}`);
-      return;
-    }
-    router.push('/(tabs)/search');
-  };
-
   if (loading) {
     return <LoadingState />;
   }
@@ -145,9 +115,6 @@ export default function RankedListScreen() {
       queueActive={queueActive}
       queueCurrent={dashboard.rankingHealth.queueProgress.current}
       queueTotal={dashboard.rankingHealth.queueProgress.total}
-      onPrimaryAction={handlePrimaryAction}
-      onSecondaryAction={handleContinueRanking}
-      primaryLabel={primaryLabel}
     />
   );
 
@@ -193,8 +160,6 @@ export default function RankedListScreen() {
         }>
         <DashboardToolbar
           displayName={displayName}
-          showImport={isSpotifyUser}
-          onImport={() => router.push('/onboarding/import')}
           showSignOut={!isWide}
           onSignOut={requestSignOut}
         />
@@ -206,11 +171,9 @@ export default function RankedListScreen() {
               title="No songs yet"
               subtitle={
                 isSpotifyUser
-                  ? 'Import your top tracks to start ranking, then log songs one at a time.'
-                  : 'Log your first song to unlock score insights and artist trends.'
+                  ? 'Use the sidebar to import your top tracks, then start ranking songs.'
+                  : 'Use the sidebar to log your first songs and unlock score insights.'
               }
-              ctaTitle={isSpotifyUser ? 'Import Spotify top tracks' : 'Log a song'}
-              onPressCta={handlePrimaryAction}
               mark="M"
             />
           </View>

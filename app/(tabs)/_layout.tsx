@@ -87,6 +87,14 @@ export default function TabLayout() {
               ),
             }}
           />
+          <Tabs.Screen
+            name="import"
+            options={{
+              title: 'Quick start',
+              href: null,
+              headerShown: false,
+            }}
+          />
         </Tabs>
       </View>
     </View>

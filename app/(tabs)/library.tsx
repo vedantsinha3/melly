@@ -95,7 +95,7 @@ export default function LibraryScreen() {
         <DashboardToolbar
           displayName={displayName}
           showImport={isSpotifyUser}
-          onImport={() => router.push('/onboarding/import')}
+          onImport={() => router.push('/(tabs)/import')}
           showSignOut
           onSignOut={requestSignOut}
         />

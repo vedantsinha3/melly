@@ -13,9 +13,9 @@ type Props = {
   queueActive: boolean;
   queueCurrent: number;
   queueTotal: number;
-  onPrimaryAction: () => void;
+  onPrimaryAction?: () => void;
   onSecondaryAction?: () => void;
-  primaryLabel: string;
+  primaryLabel?: string;
   showImport?: boolean;
   onImport?: () => void;
   onViewRanking?: () => void;
@@ -86,7 +86,7 @@ export function DashboardToolbar({
       </View>
       <View style={[styles.toolbarActions, { gap: spacing.sm }]}>
         {showImport && onImport ? (
-          <Button title="Import" variant="secondary" size="sm" onPress={onImport} />
+          <Button title="Quick start" variant="secondary" size="sm" onPress={onImport} />
         ) : null}
         {onViewRanking ? (
           <Button
@@ -162,12 +162,14 @@ export function DashboardHero({
           />
         </View>
 
-        <View style={[styles.heroActions, { gap: spacing.sm }]}>
-          <Button title={primaryLabel} onPress={onPrimaryAction} />
-          {queueActive && onSecondaryAction ? (
-            <Button title="Continue" variant="secondary" onPress={onSecondaryAction} />
-          ) : null}
-        </View>
+        {onPrimaryAction && primaryLabel ? (
+          <View style={[styles.heroActions, { gap: spacing.sm }]}>
+            <Button title={primaryLabel} onPress={onPrimaryAction} />
+            {queueActive && onSecondaryAction ? (
+              <Button title="Continue" variant="secondary" onPress={onSecondaryAction} />
+            ) : null}
+          </View>
+        ) : null}
       </View>
 
       {queueActive ? (
