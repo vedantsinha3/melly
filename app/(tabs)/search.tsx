@@ -3,21 +3,28 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
+  NativeSyntheticEvent,
   ScrollView,
   StyleSheet,
+  TextInputKeyPressEventData,
   View,
 } from 'react-native';
 
+import { LibrarySearchResults } from '@/components/log-song/LibrarySearchResults';
 import { LogSongProgressBanner } from '@/components/log-song/LogSongProgressBanner';
 import { TrackFeedCard } from '@/components/log-song/TrackFeedCard';
 import { TrackFeedSection } from '@/components/log-song/TrackFeedSection';
-import { SongCard } from '@/components/SongCard';
 import { Screen, Text, TextField, wideScrollContentStyle } from '@/components/ui';
 import { useAuth } from '@/contexts/AuthContext';
 import { useImportQueue } from '@/contexts/ImportQueueContext';
 import { getTheme } from '@/constants/theme';
 import { useColorScheme } from '@/components/useColorScheme';
+import {
+  buildLibrarySearchViewModel,
+  flattenSearchResults,
+  type LibrarySearchViewModel,
+  type SelectableSearchResult,
+} from '@/lib/librarySearch';
 import {
   buildLogSongFeed,
   buildRankingProgress,
@@ -27,7 +34,9 @@ import {
 import { fetchRankedRatings, hasExistingRating } from '@/lib/ranking';
 import { searchTracks, spotifyTrackToTrack, upsertTrack } from '@/lib/spotify';
 import { supabase } from '@/lib/supabase';
-import type { SpotifySearchTrack, Track } from '@/types';
+import type { RatingWithTrack, SpotifySearchTrack, Track } from '@/types';
+
+const EMPTY_SEARCH: LibrarySearchViewModel = { ranked: [], spotify: [] };
 
 export default function SearchScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -37,21 +46,22 @@ export default function SearchScreen() {
   const router = useRouter();
 
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<SpotifySearchTrack[]>([]);
+  const [searchModel, setSearchModel] = useState<LibrarySearchViewModel>(EMPTY_SEARCH);
   const [searching, setSearching] = useState(false);
   const [logging, setLogging] = useState<string | null>(null);
-  const [rankedCount, setRankedCount] = useState(0);
-  const [rankedIds, setRankedIds] = useState<Set<string>>(new Set());
+  const [rankedRatings, setRankedRatings] = useState<RatingWithTrack[]>([]);
   const [sections, setSections] = useState<FeedSection[]>([]);
   const [continueTrack, setContinueTrack] = useState<Track | null>(null);
   const [feedLoading, setFeedLoading] = useState(true);
   const [highlightId, setHighlightId] = useState<string | null>(null);
-
   const [feedError, setFeedError] = useState<string | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState(0);
 
   const hasQuery = query.trim().length > 2;
+  const rankedCount = rankedRatings.length;
   const progress = useMemo(() => buildRankingProgress(rankedCount), [rankedCount]);
   const queueProgress = getProgress();
+  const selectableResults = useMemo(() => flattenSearchResults(searchModel), [searchModel]);
 
   const loadFeed = useCallback(async () => {
     if (!user || authLoading) return;
@@ -61,8 +71,7 @@ export default function SearchScreen() {
     try {
       const ratings = await fetchRankedRatings(user.id);
       const ids = new Set(ratings.map((rating) => rating.track.spotify_id));
-      setRankedCount(ratings.length);
-      setRankedIds(ids);
+      setRankedRatings(ratings);
 
       const queueTrackId = isActive ? getCurrentTrackId() : null;
       if (queueTrackId) {
@@ -106,24 +115,36 @@ export default function SearchScreen() {
 
   useEffect(() => {
     if (!hasQuery) {
-      setResults([]);
+      setSearchModel(EMPTY_SEARCH);
+      setSearching(false);
+      setSelectedIndex(0);
       return;
     }
 
+    const trimmed = query.trim();
     const timer = setTimeout(async () => {
       setSearching(true);
       try {
-        const tracks = await searchTracks(query);
-        setResults(tracks.filter((track) => !rankedIds.has(track.id)));
+        const spotifyTracks = await searchTracks(trimmed);
+        setSearchModel(buildLibrarySearchViewModel(rankedRatings, spotifyTracks, trimmed));
+        setSelectedIndex(0);
       } catch (error) {
         console.error(error);
+        setSearchModel(buildLibrarySearchViewModel(rankedRatings, [], trimmed));
       } finally {
         setSearching(false);
       }
     }, 400);
 
     return () => clearTimeout(timer);
-  }, [query, hasQuery, rankedIds]);
+  }, [query, hasQuery, rankedRatings]);
+
+  const openRankedSong = useCallback(
+    (ratingId: string) => {
+      router.push(`/song/${ratingId}`);
+    },
+    [router],
+  );
 
   const startRanking = useCallback(
     async (item: SpotifySearchTrack | Track) => {
@@ -138,6 +159,11 @@ export default function SearchScreen() {
 
         const exists = await hasExistingRating(user.id, track.spotify_id);
         if (exists) {
+          const existing = rankedRatings.find((rating) => rating.track.spotify_id === track.spotify_id);
+          if (existing) {
+            openRankedSong(existing.id);
+            return;
+          }
           Alert.alert('Already ranked', 'This song is already in your ranked list.');
           await loadFeed();
           return;
@@ -150,8 +176,56 @@ export default function SearchScreen() {
         setLogging(null);
       }
     },
-    [user, router, loadFeed],
+    [user, router, loadFeed, rankedRatings, openRankedSong],
   );
+
+  const activateSelection = useCallback(
+    (selection: SelectableSearchResult | undefined) => {
+      if (!selection) return;
+
+      if (selection.kind === 'ranked' || selection.kind === 'spotify-view') {
+        openRankedSong(selection.ratingId);
+        return;
+      }
+
+      const match = searchModel.spotify.find((item) => item.track.id === selection.spotifyId);
+      if (match) {
+        startRanking(match.track);
+      }
+    },
+    [openRankedSong, searchModel.spotify, startRanking],
+  );
+
+  const handleSearchKeyPress = (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
+    const key = event.nativeEvent.key;
+
+    if (key === 'Escape') {
+      setQuery('');
+      setSelectedIndex(0);
+      return;
+    }
+
+    if (!hasQuery || selectableResults.length === 0) return;
+
+    if (key === 'ArrowDown') {
+      event.preventDefault?.();
+      setSelectedIndex((current) => (current + 1) % selectableResults.length);
+      return;
+    }
+
+    if (key === 'ArrowUp') {
+      event.preventDefault?.();
+      setSelectedIndex((current) =>
+        current <= 0 ? selectableResults.length - 1 : current - 1,
+      );
+      return;
+    }
+
+    if (key === 'Enter') {
+      event.preventDefault?.();
+      activateSelection(selectableResults[selectedIndex]);
+    }
+  };
 
   const continueSection = continueTrack ? (
     <View style={{ gap: spacing.sm }}>
@@ -199,49 +273,35 @@ export default function SearchScreen() {
 
         <View style={[styles.searchWrap, { gap: spacing.xs }]}>
           <Text variant="caption" tone="tertiary">
-            Search Spotify
+            Search your library and Spotify
           </Text>
           <TextField
             placeholder="Song, artist, or album"
             value={query}
             onChangeText={setQuery}
+            onKeyPress={handleSearchKeyPress}
             autoCorrect={false}
             autoCapitalize="none"
+            returnKeyType="search"
             style={styles.searchInput}
           />
+          {hasQuery ? (
+            <Text variant="caption" tone="tertiary">
+              ↑↓ to navigate · Enter to open · Esc to clear
+            </Text>
+          ) : null}
         </View>
 
         {hasQuery ? (
-          <View style={{ gap: spacing.sm }}>
-            <Text variant="heading">Search results</Text>
-            {searching ? <ActivityIndicator color={colors.accent} /> : null}
-            {!searching && results.length === 0 ? (
-              <Text variant="bodySmall" tone="secondary">
-                No unranked tracks found. Try another search.
-              </Text>
-            ) : null}
-            <FlatList
-              data={results}
-              keyExtractor={(item) => item.id}
-              scrollEnabled={false}
-              contentContainerStyle={{ gap: spacing.sm }}
-              renderItem={({ item }) => (
-                <SongCard
-                  track={spotifyTrackToTrack(item)}
-                  onPress={() => startRanking(item)}
-                  rightElement={
-                    logging === item.id ? (
-                      <ActivityIndicator color={colors.accent} />
-                    ) : (
-                      <Text variant="label" tone="accent">
-                        Rank
-                      </Text>
-                    )
-                  }
-                />
-              )}
-            />
-          </View>
+          <LibrarySearchResults
+            model={searchModel}
+            loading={searching}
+            query={query}
+            selectedIndex={selectedIndex}
+            loggingId={logging}
+            onViewRanked={openRankedSong}
+            onRankSpotify={startRanking}
+          />
         ) : (
           <>
             {feedLoading ? (
