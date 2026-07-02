@@ -26,6 +26,14 @@ export type DashboardViewModel = {
       averageScore: number;
       artworkUrl: string | null;
     }>;
+    topSongs: Array<{
+      ratingId: string;
+      title: string;
+      artist: string;
+      score: number;
+      rankPosition: number;
+      artworkUrl: string | null;
+    }>;
     topArtistByScore: { name: string; average: number } | null;
     scoreHistogram: HistogramBucket[];
     profile: TasteProfileModule | null;
@@ -103,6 +111,18 @@ export function buildDashboardViewModel(
 
   const favoriteArtist = topArtists[0]?.name ?? null;
 
+  const topSongs = [...ratings]
+    .sort((a, b) => a.rank_position - b.rank_position)
+    .slice(0, 5)
+    .map((rating) => ({
+      ratingId: rating.id,
+      title: rating.track.name,
+      artist: rating.track.artist_names.join(', '),
+      score: Number(rating.score),
+      rankPosition: rating.rank_position,
+      artworkUrl: rating.track.album_art_url,
+    }));
+
   const topArtistByScore = [...artistScores.entries()]
     .filter(([, value]) => value.count >= 2)
     .sort((a, b) => b[1].total / b[1].count - a[1].total / a[1].count)[0];
@@ -125,6 +145,7 @@ export function buildDashboardViewModel(
     },
     tasteProfile: {
       topArtists,
+      topSongs,
       topArtistByScore: topArtistByScore
         ? {
             name: topArtistByScore[0],

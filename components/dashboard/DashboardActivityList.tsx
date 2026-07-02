@@ -2,8 +2,8 @@ import { Image } from 'expo-image';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { Card, Text } from '@/components/ui';
-import { getTheme } from '@/constants/theme';
 import { useColorScheme } from '@/components/useColorScheme';
+import { getTheme } from '@/constants/theme';
 
 type ActivityItem = {
   ratingId: string;

@@ -62,12 +62,11 @@ export default function LibraryScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
       loadRatings();
     }, [loadRatings]),
   );
 
-  if (loading) {
+  if (loading && ratings.length === 0) {
     return <LoadingState />;
   }
 

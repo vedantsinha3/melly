@@ -62,6 +62,10 @@ function formatDuration(ms: number): string {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
+function isSpotifyRateLimitError(error: unknown): boolean {
+  return error instanceof Error && error.message.toLowerCase().includes('rate limiting');
+}
+
 function normalizeTrackKey(title: string, artist: string): string {
   return `${title.toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim()}|${artist
     .toLowerCase()
@@ -235,7 +239,11 @@ export default function AlbumDetailScreen() {
         })),
       );
     } catch (error) {
-      console.error(error);
+      if (isSpotifyRateLimitError(error)) {
+        console.warn(error);
+      } else {
+        console.error(error);
+      }
       setAlbumTracks([]);
       setTracklistError(
         error instanceof Error ? error.message : 'Failed to load album tracklist from Spotify.',
@@ -403,7 +411,9 @@ export default function AlbumDetailScreen() {
                   </View>
                 ) : null}
 
-                <Text variant="bodySmall" tone={isComplete ? 'accent' : 'secondary'}>
+                <Text
+                  variant="bodySmall"
+                  tone={tracklistError ? 'tertiary' : isComplete ? 'accent' : 'secondary'}>
                   {completionMessage}
                 </Text>
 

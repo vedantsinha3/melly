@@ -77,7 +77,6 @@ export default function AlbumsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
       loadRatings();
     }, [loadRatings]),
   );
@@ -96,7 +95,7 @@ export default function AlbumsScreen() {
     [router],
   );
 
-  if (loading) return <LoadingState />;
+  if (loading && ratings.length === 0) return <LoadingState />;
 
   return (
     <Screen edgeToEdge wide contentStyle={styles.container}>

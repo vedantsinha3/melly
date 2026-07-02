@@ -9,6 +9,7 @@ type CacheEntry<T> = { expiresAt: number; value: T };
 
 const albumTracksCache = new Map<string, CacheEntry<SpotifyAlbumTrack[]>>();
 const trackByIdCache = new Map<string, CacheEntry<SpotifySearchTrack>>();
+const artistImageCache = new Map<string, CacheEntry<string | null>>();
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -45,6 +46,15 @@ function readCache<T>(cache: Map<string, CacheEntry<T>>, key: string): T | null 
 
 function writeCache<T>(cache: Map<string, CacheEntry<T>>, key: string, value: T): void {
   cache.set(key, { expiresAt: Date.now() + SPOTIFY_CACHE_TTL_MS, value });
+}
+
+function normalizeArtistKey(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
 }
 
 function base64Encode(value: string): string {
@@ -167,6 +177,38 @@ export async function searchTracks(query: string): Promise<SpotifySearchTrack[]>
     } catch {
       throw clientError;
     }
+  }
+}
+
+export async function getSpotifyArtistImageUrl(artistName: string): Promise<string | null> {
+  const key = normalizeArtistKey(artistName);
+  if (!key) return null;
+
+  const cached = readCache(artistImageCache, key);
+  if (cached !== null) return cached;
+
+  try {
+    const token = await getClientCredentialsToken();
+    const query = encodeURIComponent(artistName.trim());
+    const response = await fetch(`https://api.spotify.com/v1/search?q=${query}&type=artist&limit=1`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!response.ok) {
+      writeCache(artistImageCache, key, null);
+      return null;
+    }
+
+    const data = (await response.json()) as {
+      artists?: { items?: Array<{ images?: Array<{ url: string }> }> };
+    };
+
+    const url = data.artists?.items?.[0]?.images?.[0]?.url ?? null;
+    writeCache(artistImageCache, key, url);
+    return url;
+  } catch {
+    writeCache(artistImageCache, key, null);
+    return null;
   }
 }
 

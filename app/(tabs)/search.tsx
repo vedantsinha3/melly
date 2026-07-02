@@ -77,7 +77,7 @@ export default function SearchScreen() {
   const loadFeed = useCallback(async () => {
     if (!user || authLoading) return;
 
-    setFeedLoading(true);
+    setFeedLoading(rankedRatings.length === 0);
     setFeedError(null);
     try {
       const ratings = await fetchRankedRatings(user.id);
@@ -114,7 +114,7 @@ export default function SearchScreen() {
     } finally {
       setFeedLoading(false);
     }
-  }, [user, authLoading, isSpotifyUser, getSpotifyAccessToken, isActive, getCurrentTrackId]);
+  }, [user, authLoading, isSpotifyUser, getSpotifyAccessToken, isActive, getCurrentTrackId, rankedRatings.length]);
 
   useFocusEffect(
     useCallback(() => {
@@ -315,11 +315,13 @@ export default function SearchScreen() {
         contentContainerStyle={[wideScrollContentStyle(), styles.content, { gap: spacing.lg, paddingBottom: spacing['2xl'] }]}
         keyboardShouldPersistTaps="always"
         keyboardDismissMode="on-drag">
-        <LogSongProgressBanner
-          headline={progress.headline}
-          subline={progress.subline}
-          completionPct={progress.completionPct}
-        />
+        {!feedLoading ? (
+          <LogSongProgressBanner
+            headline={progress.headline}
+            subline={progress.subline}
+            completionPct={progress.completionPct}
+          />
+        ) : null}
 
         <View style={[styles.searchWrap, { gap: spacing.xs }]}>
           <Text variant="caption" tone="tertiary">

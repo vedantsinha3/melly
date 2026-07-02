@@ -1,27 +1,31 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import {
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    useWindowDimensions,
-    View,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  View,
 } from 'react-native';
 
 import {
-    DashboardActivityList,
-    DashboardArtistRail,
-    DashboardHero,
-    DashboardScoreChart,
-    DashboardToolbar,
+  DashboardActivityList,
+  DashboardArtistRail,
+  DashboardFeaturedAlbum,
+  DashboardHero,
+  DashboardScoreChart,
+  DashboardSongRail,
+  DashboardToolbar,
 } from '@/components/dashboard';
-import { EmptyState, LoadingState, Screen, Text, wideScrollContentStyle } from '@/components/ui';
+import { EmptyState, LoadingState, Screen, wideScrollContentStyle } from '@/components/ui';
 import { useColorScheme } from '@/components/useColorScheme';
 import { getTheme, layout } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useImportQueue } from '@/contexts/ImportQueueContext';
+import { buildAlbumCatalog } from '@/lib/albums';
 import { buildDashboardViewModel } from '@/lib/dashboard';
 import { fetchRankedRatings } from '@/lib/ranking';
+import { getSpotifyArtistImageUrl } from '@/lib/spotify';
 import type { RatingWithTrack } from '@/types';
 
 type UserMeta = {
@@ -61,12 +65,36 @@ export default function RankedListScreen() {
   const [ratings, setRatings] = useState<RatingWithTrack[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [artistProfileImages, setArtistProfileImages] = useState<Record<string, string | null>>({});
 
   const loadRatings = useCallback(async () => {
     if (!user) return;
     try {
       const data = await fetchRankedRatings(user.id);
       setRatings(data);
+
+      // Fetch Spotify artist profile images for the top artists so this rail doesn't just look like more album art.
+      const artistCounts = new Map<string, number>();
+      for (const rating of data) {
+        for (const name of rating.track.artist_names) {
+          artistCounts.set(name, (artistCounts.get(name) ?? 0) + 1);
+        }
+      }
+
+      const topArtistNames = [...artistCounts.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([name]) => name);
+
+      const results = await Promise.all(
+        topArtistNames.map(async (name) => [name, await getSpotifyArtistImageUrl(name)] as const),
+      );
+
+      setArtistProfileImages((current) => {
+        const next = { ...current };
+        for (const [name, url] of results) next[name] = url;
+        return next;
+      });
     } catch (error) {
       console.error(error);
     } finally {
@@ -77,7 +105,6 @@ export default function RankedListScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
       loadRatings();
     }, [loadRatings]),
   );
@@ -102,9 +129,11 @@ export default function RankedListScreen() {
   const lowData = ratings.length < 3;
   const queueActive = dashboard.rankingHealth.queueProgress.isActive;
 
-  if (loading) {
+  if (loading && ratings.length === 0) {
     return <LoadingState />;
   }
+
+  const featuredAlbum = buildAlbumCatalog(ratings, 'favorite').featuredAlbum;
 
   const heroBlock = (
     <DashboardHero
@@ -120,7 +149,18 @@ export default function RankedListScreen() {
 
   const artistsBlock = (
     <DashboardArtistRail
-      artists={dashboard.tasteProfile.topArtists}
+      artists={dashboard.tasteProfile.topArtists.map((artist) => ({
+        ...artist,
+        artworkUrl: artistProfileImages[artist.name] ?? artist.artworkUrl,
+      }))}
+      lowData={lowData}
+      expanded={isWide}
+    />
+  );
+
+  const songsBlock = (
+    <DashboardSongRail
+      songs={dashboard.tasteProfile.topSongs}
       lowData={lowData}
       expanded={isWide}
     />
@@ -180,7 +220,15 @@ export default function RankedListScreen() {
         ) : (
           <>
             {heroBlock}
+            {featuredAlbum ? (
+              <DashboardFeaturedAlbum
+                album={featuredAlbum}
+                onPress={() => router.push(`/album/${encodeURIComponent(featuredAlbum.key)}`)}
+                onViewCollection={() => router.push('/(tabs)/albums')}
+              />
+            ) : null}
             {artistsBlock}
+            {songsBlock}
             {insightsBlock}
           </>
         )}

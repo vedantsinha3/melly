@@ -3,30 +3,31 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
-import { DetailShell } from '@/components/navigation/DetailShell';
 import {
-  ArtistAlbums,
-  ArtistDetailSkeleton,
-  ArtistHero,
-  ArtistInsights,
-  ArtistMiniChart,
-  ArtistNotesHighlights,
-  ArtistSecondaryStats,
-  ArtistSimilarArtists,
-  ArtistSongList,
+    ArtistAlbums,
+    ArtistDetailSkeleton,
+    ArtistHero,
+    ArtistInsights,
+    ArtistMiniChart,
+    ArtistNotesHighlights,
+    ArtistSecondaryStats,
+    ArtistSimilarArtists,
+    ArtistSongList,
 } from '@/components/artist';
+import { DetailShell } from '@/components/navigation/DetailShell';
 import { EmptyState, Screen } from '@/components/ui';
-import { useAuth } from '@/contexts/AuthContext';
-import { getTheme, layout } from '@/constants/theme';
 import { useColorScheme } from '@/components/useColorScheme';
+import { getTheme, layout } from '@/constants/theme';
+import { useAuth } from '@/contexts/AuthContext';
 import {
-  buildArtistDetail,
-  sortArtistSongs,
-  type ArtistDetailViewModel,
-  type ArtistSortMode,
+    buildArtistDetail,
+    sortArtistSongs,
+    type ArtistDetailViewModel,
+    type ArtistSortMode,
 } from '@/lib/artistDetail';
-import { fetchRankedRatings } from '@/lib/ranking';
 import { goBackOrFallback } from '@/lib/navigation';
+import { fetchRankedRatings } from '@/lib/ranking';
+import { getSpotifyArtistImageUrl } from '@/lib/spotify';
 
 export default function ArtistDetailScreen() {
   const { artistName } = useLocalSearchParams<{ artistName: string }>();
@@ -40,6 +41,7 @@ export default function ArtistDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [detail, setDetail] = useState<ArtistDetailViewModel | null>(null);
   const [sortMode, setSortMode] = useState<ArtistSortMode>('highest');
+  const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
 
   const openSong = useCallback(
     (ratingId: string) => {
@@ -56,6 +58,7 @@ export default function ArtistDetailScreen() {
       const ratings = await fetchRankedRatings(user.id);
       const model = buildArtistDetail(ratings, artistName);
       setDetail(model);
+      setProfileImageUrl(await getSpotifyArtistImageUrl(artistName));
     } catch (error) {
       console.error(error);
       setDetail(null);
@@ -107,7 +110,11 @@ export default function ArtistDetailScreen() {
       <Animated.View entering={FadeIn.duration(320)} style={{ gap: spacing.lg, paddingBottom: spacing['2xl'] }}>
         <ArtistHero
           artistName={detail.artistName}
-          hero={detail.hero}
+          hero={{
+            ...detail.hero,
+            artworkUrl: profileImageUrl ?? detail.hero.artworkUrl,
+            supportingArtworkUrls: [],
+          }}
           favoriteSong={detail.favoriteSong}
           onFavoritePress={openSong}
         />
