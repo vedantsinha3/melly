@@ -60,7 +60,11 @@ type PlacementContext = {
 };
 
 export default function CompareScreen() {
-  const { trackId, ts } = useLocalSearchParams<{ trackId: string; ts?: string }>();
+  const { trackId, ts, albumKey } = useLocalSearchParams<{
+    trackId: string;
+    ts?: string;
+    albumKey?: string;
+  }>();
   const colorScheme = useColorScheme() ?? 'light';
   const { colors, spacing } = getTheme(colorScheme);
   const { user } = useAuth();
@@ -90,7 +94,8 @@ export default function CompareScreen() {
       if (isActive) {
         const nextTrackId = advanceToNext();
         if (nextTrackId) {
-          router.replace(`/compare/${nextTrackId}`);
+          const params = albumKey ? `?albumKey=${encodeURIComponent(albumKey)}` : '';
+          router.replace(`/compare/${nextTrackId}${params}`);
           return;
         }
 
@@ -98,9 +103,14 @@ export default function CompareScreen() {
         clearQueue();
       }
 
+      if (albumKey) {
+        router.replace(`/album/${encodeURIComponent(albumKey)}`);
+        return;
+      }
+
       router.replace(`/song/${ratingId}`);
     },
-    [user, isActive, advanceToNext, clearQueue, router],
+    [user, isActive, advanceToNext, clearQueue, router, albumKey],
   );
 
   const loadData = useCallback(async () => {

@@ -3,6 +3,50 @@ import type { SpotifyAlbumTrack, SpotifySearchTrack, TopTracksTimeRange, Track }
 
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
+const SPOTIFY_CACHE_TTL_MS = 10 * 60 * 1000;
+
+type CacheEntry<T> = { expiresAt: number; value: T };
+
+const albumTracksCache = new Map<string, CacheEntry<SpotifyAlbumTrack[]>>();
+const trackByIdCache = new Map<string, CacheEntry<SpotifySearchTrack>>();
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function spotifyFetch(accessToken: string, url: string): Promise<Response> {
+  let delayMs = 1000;
+
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    if (response.status !== 429) return response;
+    if (attempt === 3) return response;
+
+    const retryAfterHeader = response.headers.get('Retry-After');
+    const retryAfterMs = retryAfterHeader ? Number(retryAfterHeader) * 1000 : delayMs;
+    await sleep(Number.isFinite(retryAfterMs) && retryAfterMs > 0 ? retryAfterMs : delayMs);
+    delayMs = Math.min(delayMs * 2, 8000);
+  }
+
+  throw new Error('Spotify request failed');
+}
+
+function readCache<T>(cache: Map<string, CacheEntry<T>>, key: string): T | null {
+  const hit = cache.get(key);
+  if (!hit || Date.now() > hit.expiresAt) {
+    cache.delete(key);
+    return null;
+  }
+  return hit.value;
+}
+
+function writeCache<T>(cache: Map<string, CacheEntry<T>>, key: string, value: T): void {
+  cache.set(key, { expiresAt: Date.now() + SPOTIFY_CACHE_TTL_MS, value });
+}
+
 function base64Encode(value: string): string {
   if (typeof globalThis.btoa === 'function') {
     return globalThis.btoa(value);
@@ -148,16 +192,20 @@ export async function getUserTopTracks(
 }
 
 export async function getTrackById(accessToken: string, trackId: string): Promise<SpotifySearchTrack> {
-  const response = await fetch(`https://api.spotify.com/v1/tracks/${trackId}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  const cacheKey = `${accessToken.slice(0, 8)}:${trackId}`;
+  const cached = readCache(trackByIdCache, cacheKey);
+  if (cached) return cached;
+
+  const response = await spotifyFetch(accessToken, `https://api.spotify.com/v1/tracks/${trackId}`);
 
   if (!response.ok) {
     const body = await response.text();
     throw new Error(`Spotify track lookup failed (${response.status}): ${body}`);
   }
 
-  return (await response.json()) as SpotifySearchTrack;
+  const track = (await response.json()) as SpotifySearchTrack;
+  writeCache(trackByIdCache, cacheKey, track);
+  return track;
 }
 
 export async function getSpotifyReadToken(
@@ -177,9 +225,10 @@ export async function searchSpotifyAlbumId(
   artistName: string,
 ): Promise<string | null> {
   const query = encodeURIComponent(`album:${albumName} artist:${artistName}`);
-  const response = await fetch(`https://api.spotify.com/v1/search?q=${query}&type=album&limit=5`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  const response = await spotifyFetch(
+    accessToken,
+    `https://api.spotify.com/v1/search?q=${query}&type=album&limit=5`,
+  );
 
   if (!response.ok) return null;
 
@@ -203,12 +252,13 @@ export async function resolveSpotifyAlbumId(
 ): Promise<string | null> {
   if (albumId?.trim()) return albumId;
 
-  for (const trackId of rankedTrackIds) {
+  const firstTrackId = rankedTrackIds[0];
+  if (firstTrackId) {
     try {
-      const track = await getTrackById(accessToken, trackId);
+      const track = await getTrackById(accessToken, firstTrackId);
       if (track.album.id?.trim()) return track.album.id;
     } catch {
-      // Try the next ranked track.
+      // Fall through to album search.
     }
   }
 
@@ -216,16 +266,21 @@ export async function resolveSpotifyAlbumId(
 }
 
 export async function getAlbumTracks(accessToken: string, albumId: string): Promise<SpotifyAlbumTrack[]> {
+  const cacheKey = `${accessToken.slice(0, 8)}:${albumId}`;
+  const cached = readCache(albumTracksCache, cacheKey);
+  if (cached) return cached;
+
   const tracks: SpotifyAlbumTrack[] = [];
   let nextUrl: string | null = `https://api.spotify.com/v1/albums/${albumId}/tracks?limit=50`;
 
   while (nextUrl) {
-    const response = await fetch(nextUrl, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
+    const response = await spotifyFetch(accessToken, nextUrl);
 
     if (!response.ok) {
       const body = await response.text();
+      if (response.status === 429) {
+        throw new Error('Spotify is rate limiting requests. Try again in a moment.');
+      }
       throw new Error(`Spotify album tracks failed (${response.status}): ${body}`);
     }
 
@@ -254,6 +309,7 @@ export async function getAlbumTracks(accessToken: string, albumId: string): Prom
     nextUrl = payload.next;
   }
 
+  writeCache(albumTracksCache, cacheKey, tracks);
   return tracks;
 }
 

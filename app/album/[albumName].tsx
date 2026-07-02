@@ -20,12 +20,13 @@ import { getTheme, layout } from '@/constants/theme';
 import { useColorScheme } from '@/components/useColorScheme';
 import {
   buildAlbumSummaries,
+  getExploringProgressCopy,
   resolveAlbumSummary,
   type AlbumRankedSong,
   type AlbumSummary,
 } from '@/lib/albums';
 import { hasExistingRating, fetchRankedRatings } from '@/lib/ranking';
-import { buildScoreHistogram, getScoreBarColor } from '@/lib/scoreHistogram';
+import { goBackOrFallback, openCompareFlow } from '@/lib/navigation';
 import {
   getAlbumTracks,
   getSpotifyReadToken,
@@ -34,7 +35,8 @@ import {
   spotifyTrackToTrack,
   upsertTrack,
 } from '@/lib/spotify';
-import { goBackOrFallback } from '@/lib/navigation';
+
+import { AlbumProgressBar } from '@/components/album';
 
 type AlbumTrackRow = {
   id: string;
@@ -52,8 +54,6 @@ type AlbumTracklistRow = {
   durationMs: number | null;
   ranked: AlbumRankedSong | null;
 };
-
-const STATS_UNLOCK_THRESHOLD = 5;
 
 function formatDuration(ms: number): string {
   const totalSeconds = Math.round(ms / 1000);
@@ -176,26 +176,23 @@ export default function AlbumDetailScreen() {
     ? albumTracks.reduce((sum, track) => sum + track.durationMs, 0)
     : null;
   const nextUnrankedTrackId = unrankedTracks[0]?.id ?? null;
-  const completionMessage = buildCompletionMessage(
-    isComplete,
-    songsLeft,
-    summary?.albumTypeBadge ?? 'Album',
-    tracklistError,
-    loadingTracklist,
-  );
-  const histogram = useMemo(
-    () =>
-      summary ? buildScoreHistogram(summary.rankedSongs.map((song) => ({ score: song.score }))) : [],
-    [summary],
-  );
-  const showStats = (summary?.rankedCount ?? 0) >= STATS_UNLOCK_THRESHOLD;
+  const completionMessage = useMemo(() => {
+    if (loadingTracklist) return 'Loading album tracklist…';
+    if (tracklistError) return tracklistError;
+    if (!summary) return 'Load full tracklist to calculate completion.';
+    if (isComplete) return summary.completionStatus || "You've ranked every song on this release.";
+    if (songsLeft != null && songsLeft > 0) {
+      return buildCompletionMessage(isComplete, songsLeft, summary.albumTypeBadge, null, false);
+    }
+    return getExploringProgressCopy({ songsLeft, completionPct, isComplete });
+  }, [summary, isComplete, songsLeft, completionPct, tracklistError, loadingTracklist]);
 
   const load = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
       const ratings = await fetchRankedRatings(user.id);
-      const albums = buildAlbumSummaries(ratings, 'highest_rated', 'all');
+      const albums = buildAlbumSummaries(ratings, 'favorite', 'all');
       const selected = resolveAlbumSummary(albums, albumKey);
       setSummary(selected);
 
@@ -227,15 +224,6 @@ export default function AlbumDetailScreen() {
 
       setSpotifyAlbumId(resolvedAlbumId);
 
-      for (const song of selected.rankedSongs) {
-        try {
-          const spotifyTrack = await getTrackById(token, song.trackId);
-          await upsertTrack(spotifyTrackToTrack(spotifyTrack));
-        } catch {
-          // Best effort metadata backfill.
-        }
-      }
-
       const spotifyAlbumTracks = await getAlbumTracks(token, resolvedAlbumId);
       setAlbumTracks(
         spotifyAlbumTracks.map((track) => ({
@@ -248,10 +236,10 @@ export default function AlbumDetailScreen() {
       );
     } catch (error) {
       console.error(error);
-      setSummary(null);
       setAlbumTracks([]);
-      setSpotifyAlbumId(null);
-      setTracklistError(error instanceof Error ? error.message : 'Failed to load album tracklist.');
+      setTracklistError(
+        error instanceof Error ? error.message : 'Failed to load album tracklist from Spotify.',
+      );
     } finally {
       setLoadingTracklist(false);
       setLoading(false);
@@ -287,14 +275,14 @@ export default function AlbumDetailScreen() {
           }
         }
 
-        router.push(`/compare/${trackId}`);
+        openCompareFlow(router, trackId, { albumKey });
       } catch (error) {
         Alert.alert('Error', error instanceof Error ? error.message : 'Failed to start ranking');
       } finally {
         setRankingTrackId(null);
       }
     },
-    [user, getSpotifyAccessToken, router],
+    [user, getSpotifyAccessToken, router, albumKey],
   );
 
   const handleRankNext = useCallback(() => {
@@ -376,6 +364,9 @@ export default function AlbumDetailScreen() {
                       Average
                     </Text>
                     <Text style={[styles.metric, { color: colors.text }]}>{summary.averageScore.toFixed(1)}</Text>
+                    <Text variant="caption" tone="tertiary">
+                      {summary.confidenceLabel}
+                    </Text>
                   </View>
                   <View style={[styles.statBlock, { flex: 1 }]}>
                     <Text variant="overline" tone="tertiary">
@@ -403,21 +394,12 @@ export default function AlbumDetailScreen() {
 
                 {completionPct != null ? (
                   <View style={{ gap: spacing.xs }}>
-                    <View style={[styles.progressTrack, { backgroundColor: colors.surfaceMuted, borderRadius: radius.pill }]}>
-                      <View
-                        style={[
-                          styles.progressFill,
-                          {
-                            width: `${completionPct}%`,
-                            backgroundColor: isComplete ? colors.accent : colors.accentMuted,
-                            borderRadius: radius.pill,
-                          },
-                        ]}
-                      />
-                    </View>
-                    <Text variant="caption" tone={isComplete ? 'accent' : 'secondary'}>
-                      {isComplete ? 'Complete' : `${completionPct}% complete`}
-                    </Text>
+                    <AlbumProgressBar
+                      completionPct={completionPct}
+                      isComplete={isComplete}
+                      showLabel
+                      height={8}
+                    />
                   </View>
                 ) : null}
 
@@ -613,38 +595,6 @@ export default function AlbumDetailScreen() {
               </Text>
             ) : null}
           </Card>
-
-          {showStats ? (
-            <Card style={{ gap: spacing.sm, padding: spacing.md }}>
-              <Text variant="heading">Your scores</Text>
-              <View style={{ gap: 6 }}>
-                {histogram.map((bucket) => (
-                  <View key={bucket.rating} style={styles.histRow}>
-                    <Text variant="caption" tone="tertiary" style={styles.histLabel}>
-                      {bucket.rating}
-                    </Text>
-                    <View style={[styles.histTrack, { backgroundColor: colors.surfaceMuted, borderRadius: radius.pill }]}>
-                      <View
-                        style={[
-                          styles.histFill,
-                          {
-                            width: `${Math.max(4, bucket.pct)}%`,
-                            backgroundColor: getScoreBarColor(bucket.rating, colorScheme),
-                            borderRadius: radius.pill,
-                          },
-                        ]}
-                      />
-                    </View>
-                    <Text variant="caption" tone="secondary" style={styles.histCount}>
-                      {bucket.count}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            </Card>
-          ) : (
-            null
-          )}
         </View>
       </Screen>
     </DetailShell>
@@ -765,25 +715,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     padding: 10,
-  },
-  histRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  histLabel: {
-    width: 16,
-  },
-  histTrack: {
-    flex: 1,
-    height: 8,
-    overflow: 'hidden',
-  },
-  histFill: {
-    height: '100%',
-  },
-  histCount: {
-    width: 14,
-    textAlign: 'right',
   },
 });

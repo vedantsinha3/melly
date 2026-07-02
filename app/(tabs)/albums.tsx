@@ -1,35 +1,31 @@
-import { Image } from 'expo-image';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { Platform, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
+import {
+  AlbumCollectionHero,
+  ContinueAlbumCard,
+  ExploringAlbumCard,
+  FavoriteAlbumCard,
+} from '@/components/album';
 import { DashboardToolbar } from '@/components/dashboard';
-import { EmptyState, LoadingState, Screen, Text, wideScrollContentStyle } from '@/components/ui';
+import { Button, EmptyState, LoadingState, Screen, Text, wideScrollContentStyle } from '@/components/ui';
 import { useColorScheme } from '@/components/useColorScheme';
 import { getTheme } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
-import {
-  buildAlbumSummaries,
-  type AlbumFilterMode,
-  type AlbumSortMode,
-  type AlbumSummary,
-} from '@/lib/albums';
+import { buildAlbumCatalog, type AlbumSortMode } from '@/lib/albums';
 import { fetchRankedRatings } from '@/lib/ranking';
 import type { RatingWithTrack } from '@/types';
 
-const SORT_OPTIONS: Array<{ value: AlbumSortMode; label: string }> = [
-  { value: 'highest_rated', label: 'Highest rated' },
-  { value: 'most_completed', label: 'Most completed' },
-  { value: 'most_ranked', label: 'Most ranked songs' },
-  { value: 'recently_ranked', label: 'Recently ranked' },
-  { value: 'artist_az', label: 'Artist A-Z' },
-];
+const FAVORITE_PREVIEW_COUNT = 6;
 
-// const FILTER_OPTIONS: Array<{ value: AlbumFilterMode; label: string }> = [
-//   { value: 'all', label: 'All' },
-//   { value: 'album', label: 'Albums' },
-//   { value: 'ep', label: 'EPs' },
-// ];
+const SORT_OPTIONS: Array<{ value: AlbumSortMode; label: string }> = [
+  { value: 'favorite', label: 'Favorite' },
+  { value: 'most_completed', label: 'Most completed' },
+  { value: 'highest_average', label: 'Highest average' },
+  { value: 'needs_ranking', label: 'Needs ranking' },
+  { value: 'recently_ranked', label: 'Recently ranked' },
+];
 
 type UserMeta = {
   full_name?: string;
@@ -63,8 +59,8 @@ export default function AlbumsScreen() {
   const [ratings, setRatings] = useState<RatingWithTrack[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [sortMode, setSortMode] = useState<AlbumSortMode>('highest_rated');
-  const [filterMode, setFilterMode] = useState<AlbumFilterMode>('all');
+  const [sortMode, setSortMode] = useState<AlbumSortMode>('favorite');
+  const [showAllFavorites, setShowAllFavorites] = useState(false);
 
   const loadRatings = useCallback(async () => {
     if (!user) return;
@@ -86,9 +82,18 @@ export default function AlbumsScreen() {
     }, [loadRatings]),
   );
 
-  const albums = useMemo(
-    () => buildAlbumSummaries(ratings, sortMode, filterMode, { catalogOnly: true }),
-    [ratings, sortMode, filterMode],
+  const catalog = useMemo(() => buildAlbumCatalog(ratings, sortMode), [ratings, sortMode]);
+  const showSections = sortMode === 'favorite';
+  const visibleFavorites = showAllFavorites
+    ? catalog.favoriteAlbums
+    : catalog.favoriteAlbums.slice(0, FAVORITE_PREVIEW_COUNT);
+  const hasMoreFavorites = catalog.favoriteAlbums.length > FAVORITE_PREVIEW_COUNT;
+
+  const openAlbum = useCallback(
+    (key: string) => {
+      router.push(`/album/${encodeURIComponent(key)}`);
+    },
+    [router],
   );
 
   if (loading) return <LoadingState />;
@@ -100,7 +105,7 @@ export default function AlbumsScreen() {
         contentContainerStyle={[
           wideScrollContentStyle(),
           styles.content,
-          { gap: spacing.sm, paddingBottom: spacing.xl },
+          { gap: spacing.lg, paddingBottom: spacing.xl },
         ]}
         refreshControl={
           <RefreshControl
@@ -121,53 +126,127 @@ export default function AlbumsScreen() {
         />
 
         <View style={{ gap: spacing.xs }}>
-          <Text variant="heading">Albums</Text>
+          <Text variant="heading">Favorite albums</Text>
           <Text variant="bodySmall" tone="secondary">
-            Albums and EPs from your ranked library.
+            Your curated collection — albums you&apos;ve truly explored.
           </Text>
         </View>
 
-        <View style={[styles.controls, { gap: spacing.sm }]}>
-          <View style={[styles.chips, { gap: spacing.xs }]}>
-            {SORT_OPTIONS.map((option) => {
-              const active = sortMode === option.value;
-              return (
-                <Pressable
-                  key={option.value}
-                  onPress={() => setSortMode(option.value)}
-                  style={({ pressed, hovered }) => [
-                    styles.chip,
-                    {
-                      backgroundColor: active ? colors.accentSoft : colors.surfaceMuted,
-                      borderColor: active ? colors.accentMuted : 'transparent',
-                      borderRadius: radius.pill,
-                      opacity: pressed ? 0.85 : 1,
-                      ...(Platform.OS === 'web' && hovered && !active
-                        ? { backgroundColor: colors.surfaceHover }
-                        : null),
-                      transitionDuration: `${motion.fast}ms`,
-                    },
-                  ]}>
-                  <Text variant="caption" tone={active ? 'accent' : 'secondary'}>
-                    {option.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+        {catalog.sortedAlbums.length > 0 ? <AlbumCollectionHero stats={catalog.stats} /> : null}
+
+        {showSections && catalog.continueAlbum ? (
+          <ContinueAlbumCard
+            album={catalog.continueAlbum}
+            onRankNext={() => openAlbum(catalog.continueAlbum!.key)}
+          />
+        ) : null}
+
+        <View style={[styles.chips, { gap: spacing.xs }]}>
+          {SORT_OPTIONS.map((option) => {
+            const active = sortMode === option.value;
+            return (
+              <Pressable
+                key={option.value}
+                onPress={() => {
+                  setSortMode(option.value);
+                  setShowAllFavorites(false);
+                }}
+                style={({ pressed, hovered }) => [
+                  styles.chip,
+                  {
+                    backgroundColor: active ? colors.accentSoft : colors.surfaceMuted,
+                    borderColor: active ? colors.accentMuted : 'transparent',
+                    borderRadius: radius.pill,
+                    opacity: pressed ? 0.85 : 1,
+                    ...(Platform.OS === 'web' && hovered && !active
+                      ? { backgroundColor: colors.surfaceHover }
+                      : null),
+                    transitionDuration: `${motion.fast}ms`,
+                  },
+                ]}>
+                <Text variant="caption" tone={active ? 'accent' : 'secondary'}>
+                  {option.label}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
 
-        {albums.length === 0 ? (
+        {catalog.sortedAlbums.length === 0 ? (
           <EmptyState
-            title="No albums yet."
-            subtitle="Rank songs from albums or EPs to start building your album rankings."
+            title="No albums yet"
+            subtitle="Rank songs from multi-track albums or EPs to start building your collection."
             mark="M"
           />
+        ) : showSections ? (
+          <View style={{ gap: spacing.lg }}>
+            {catalog.favoriteAlbums.length > 0 ? (
+              <View style={{ gap: spacing.sm }}>
+                <View style={styles.sectionHead}>
+                  <Text variant="heading">Favorite albums</Text>
+                  {hasMoreFavorites ? (
+                    <Button
+                      title={showAllFavorites ? 'Show less' : 'View all'}
+                      variant="ghost"
+                      size="sm"
+                      onPress={() => setShowAllFavorites((value) => !value)}
+                    />
+                  ) : null}
+                </View>
+                <View style={[styles.grid, { gap: spacing.md }]}>
+                  {visibleFavorites.map((album) => (
+                    <FavoriteAlbumCard key={album.key} album={album} onPress={() => openAlbum(album.key)} />
+                  ))}
+                </View>
+              </View>
+            ) : null}
+
+            {catalog.exploringAlbums.length > 0 ? (
+              <View style={{ gap: spacing.sm }}>
+                <View style={styles.sectionHead}>
+                  <Text variant="heading">Albums you&apos;re exploring</Text>
+                  <Text variant="caption" tone="tertiary">
+                    {catalog.exploringAlbums.length} in progress
+                  </Text>
+                </View>
+                <View style={{ gap: spacing.sm }}>
+                  {catalog.exploringAlbums.map((album) => (
+                    <ExploringAlbumCard
+                      key={album.key}
+                      album={album}
+                      onPress={() => openAlbum(album.key)}
+                      onContinue={() => openAlbum(album.key)}
+                    />
+                  ))}
+                </View>
+              </View>
+            ) : null}
+          </View>
         ) : (
-          <View style={[styles.grid, { gap: spacing.md }]}>
-            {albums.map((album) => (
-              <AlbumCard key={album.key} album={album} onPress={() => router.push(`/album/${encodeURIComponent(album.key)}`)} />
-            ))}
+          <View style={{ gap: spacing.sm }}>
+            <Text variant="heading">
+              {sortMode === 'needs_ranking'
+                ? 'Needs ranking'
+                : sortMode === 'highest_average'
+                  ? 'Highest average'
+                  : sortMode === 'most_completed'
+                    ? 'Most completed'
+                    : 'Recently ranked'}
+            </Text>
+            <View style={sortMode === 'needs_ranking' ? styles.list : styles.grid}>
+              {catalog.sortedAlbums.map((album) =>
+                sortMode === 'needs_ranking' ? (
+                  <ExploringAlbumCard
+                    key={album.key}
+                    album={album}
+                    onPress={() => openAlbum(album.key)}
+                    onContinue={() => openAlbum(album.key)}
+                  />
+                ) : (
+                  <FavoriteAlbumCard key={album.key} album={album} onPress={() => openAlbum(album.key)} />
+                ),
+              )}
+            </View>
           </View>
         )}
       </ScrollView>
@@ -175,64 +254,10 @@ export default function AlbumsScreen() {
   );
 }
 
-function AlbumCard({ album, onPress }: { album: AlbumSummary; onPress: () => void }) {
-  const colorScheme = useColorScheme() ?? 'light';
-  const { colors, spacing, radius, motion } = getTheme(colorScheme);
-
-  const rankedFraction = album.totalTrackCount ? `${album.rankedCount}/${album.totalTrackCount}` : `${album.rankedCount}`;
-  const completion = album.completionPct != null ? `${album.completionPct}% complete` : `${album.rankedCount} ranked`;
-
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed, hovered }) => [
-        styles.card,
-        {
-          backgroundColor: colors.surface,
-          borderColor: colors.border,
-          borderRadius: radius.lg,
-          padding: spacing.md,
-          opacity: pressed ? 0.92 : 1,
-          ...(Platform.OS === 'web' && hovered
-            ? { borderColor: colors.accentMuted, boxShadow: `0 8px 20px ${colors.shadow}`, transform: [{ translateY: -1 }] }
-            : null),
-          transitionDuration: `${motion.fast}ms`,
-        },
-      ]}>
-      <Image source={{ uri: album.artworkUrl ?? undefined }} style={[styles.artwork, { borderRadius: radius.md }]} contentFit="cover" />
-      <View style={{ gap: 3 }}>
-        <Text variant="label" numberOfLines={1}>
-          {album.title}
-        </Text>
-        <Text variant="caption" tone="secondary" numberOfLines={1}>
-          {album.artist}
-        </Text>
-        <Text variant="caption" tone="secondary">
-          {album.averageScore.toFixed(1)} avg · {rankedFraction} songs ranked
-        </Text>
-        <Text variant="caption" tone="tertiary" numberOfLines={1}>
-          Best: {album.bestSong.title}
-        </Text>
-      </View>
-      <View style={styles.footerRow}>
-        <View style={[styles.badge, { backgroundColor: colors.surfaceMuted, borderRadius: radius.pill }]}>
-          <Text variant="caption" tone="secondary">
-            {album.albumTypeBadge}
-          </Text>
-        </View>
-        <Text variant="caption" tone="tertiary">
-          {completion}
-        </Text>
-      </View>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: { flex: 1, width: '100%' },
   content: { flexGrow: 1 },
-  controls: {},
   chips: { flexDirection: 'row', flexWrap: 'wrap' },
   chip: {
     paddingHorizontal: 10,
@@ -240,16 +265,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderCurve: 'continuous',
   },
-  grid: { flexDirection: 'row', flexWrap: 'wrap' },
-  card: {
-    width: '31.8%',
-    minWidth: 240,
-    flexGrow: 1,
-    gap: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderCurve: 'continuous',
+  sectionHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
   },
-  artwork: { width: '100%', aspectRatio: 1, backgroundColor: '#1a1a1a' },
-  footerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  badge: { paddingHorizontal: 8, paddingVertical: 4 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
+  list: { gap: 12 },
 });
