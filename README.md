@@ -1,6 +1,6 @@
 # Melly
 
-A Beli-style music ranking app. Log songs you've listened to, rank them through pairwise comparisons, and build a personal ordered list with computed scores.
+A Beli-style music ranking app. Log songs you've listened to, rank them through pairwise comparisons, and build a personal ordered list with computed scores — then explore your taste at the album and artist level.
 
 ## What you'll need
 
@@ -60,6 +60,8 @@ npx expo start -c
 2. Open **SQL Editor** and run the migrations **in order**:
    - `supabase/migrations/001_initial_schema.sql`
    - `supabase/migrations/002_onboarding.sql`
+   - `supabase/migrations/002_tracks_album_metadata.sql`
+   - `supabase/migrations/003_tracks_update_metadata.sql`
 3. Enable auth providers you want to use:
    - **Email** — enabled by default
    - **Spotify** — required for Spotify login, top-tracks import, and the Log Song feed — see [docs/spotify-oauth-setup.md](docs/spotify-oauth-setup.md)
@@ -111,6 +113,7 @@ npm run web        # expo start --web
 3. If your ranked list is empty, you'll see the onboarding import flow.
 4. After setup, the **Log song** tab should show Spotify recommendations (recently played, liked, etc.).
 5. Tap a song to start ranking — compare it against songs already in your list.
+6. Visit **Albums** to see your collection build as you rank more tracks from the same release.
 
 If Spotify login fails, see [docs/spotify-oauth-setup.md](docs/spotify-oauth-setup.md) for redirect URL and email-confirmation troubleshooting.
 
@@ -118,16 +121,46 @@ If Spotify login fails, see [docs/spotify-oauth-setup.md](docs/spotify-oauth-set
 
 - **Expo (React Native)** — iOS, Android, and web from one codebase
 - **Supabase** — Auth, Postgres, Row Level Security
-- **Spotify Web API** — Track search, metadata, personalized recommendations, and top-tracks import
+- **Spotify Web API** — Track search, metadata, album tracklists, personalized recommendations, and top-tracks import
+
+## App overview
+
+| Tab / screen | What it does |
+|--------------|--------------|
+| **Dashboard** | Taste profile, score distribution, recent activity, and artist highlights |
+| **Log song** | Spotify feed, library search, and manual track lookup to start ranking |
+| **Library** | Your full ranked song list, ordered by score |
+| **Albums** | Album and EP collection — favorites, in-progress releases, and collection stats |
+| **Song detail** | Score, neighbors in your ranking, notes, and links to album/artist |
+| **Album detail** | Artwork-led tracklist, rank-next flow, completion progress |
+| **Artist detail** | Discography, top songs, and album breakdown |
+| **Compare** | Pairwise ranking flow (binary search placement) |
+
+On wide screens (web / tablet), a sidebar replaces the bottom tab bar.
 
 ## How ranking works
 
-1. Pick a song from your Spotify feed on **Log song**, search manually, or import top tracks on first login
+1. Pick a song from your Spotify feed on **Log song**, search your library or Spotify, or import top tracks on first login
 2. Tap **Rank** to start the comparison flow
 3. Choose which song deserves the higher spot — Melly uses binary search against your existing list
 4. Your score (out of 10) is derived from where the song lands in your personal ranking
 
 No star ratings — placement in your list *is* the rating.
+
+## Album collection
+
+As you rank songs, Melly groups them into albums and EPs (single-track releases are excluded from the catalog).
+
+**Favorite albums** are releases you've meaningfully explored — ranked with enough depth to trust the average. **Exploring** albums are still in progress.
+
+The **Albums** tab is organized around your collection:
+
+1. **Favorite album hero** — artwork, title, artist, average score, confidence, and completion status
+2. **Collection stats** — completed count, in-progress count, average rating, hours ranked
+3. **Continue your album** — quick path back to the release you're working through
+4. **Favorite albums grid** — top picks with confidence badges and progress
+
+Album scores use a **confidence-adjusted** ranking: albums with more ranked tracks are weighted more heavily, and completed albums get a small boost. Each album detail page shows a unified tracklist so you can rank the next song or finish what you started.
 
 ## Optional: Spotify search edge function
 
@@ -143,16 +176,25 @@ The app tries client credentials first and falls back to the edge function if ne
 ## Project structure
 
 ```
-app/                  # Expo Router screens
-  (auth)/             # Login
-  (tabs)/             # Dashboard + Log song
-  compare/            # Pairwise ranking flow
-  onboarding/         # First-time Spotify import
-components/           # UI and feature components
-contexts/             # Auth and import queue state
-lib/                  # Supabase, Spotify, ranking logic
-supabase/migrations/  # Database schema
-docs/                 # Setup guides
+app/                      # Expo Router screens
+  (auth)/                 # Login
+  (tabs)/                 # Dashboard, Log song, Library, Albums
+  album/                  # Album detail
+  artist/                 # Artist detail
+  song/                   # Song detail
+  compare/                # Pairwise ranking flow
+  onboarding/             # First-time Spotify import
+components/
+  album/                  # Collection hero, favorite/exploring cards
+  artist/                 # Artist detail sections
+  dashboard/              # Dashboard widgets
+  log-song/               # Search and Spotify feed
+  song/                   # Song detail sections
+  ui/                     # Shared primitives (Button, Card, Text, …)
+contexts/                 # Auth and import queue state
+lib/                      # Supabase, Spotify, ranking, albums, dashboard
+supabase/migrations/      # Database schema
+docs/                     # Setup guides
 ```
 
 ## Troubleshooting
@@ -171,6 +213,13 @@ docs/                 # Setup guides
 
 **Search returns an error**
 - Verify `EXPO_PUBLIC_SPOTIFY_CLIENT_ID` and `EXPO_PUBLIC_SPOTIFY_CLIENT_SECRET` in `.env`
+
+**Album tracklists fail to load / Spotify 429 errors**
+- The app caches Spotify responses and retries with `Retry-After` — wait a moment and reload
+- Heavy browsing can hit Spotify rate limits in Development Mode
+
+**Ranking or album pages error after pulling latest**
+- Run the newer migrations (`002_tracks_album_metadata.sql`, `003_tracks_update_metadata.sql`) if you haven't already
 
 **TypeScript / build issues after pulling**
 - Run `npm install` again, then `npx expo start -c`
