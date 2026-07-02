@@ -1,9 +1,9 @@
 import { Image } from 'expo-image';
-import { Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { Text } from '@/components/ui';
-import { getTheme } from '@/constants/theme';
 import { useColorScheme } from '@/components/useColorScheme';
+import { getTheme, layout } from '@/constants/theme';
 import type { ArtistHeroViewModel, ArtistHighlight } from '@/lib/artistDetail';
 
 type Props = {
@@ -21,8 +21,8 @@ function scoreLabel(score: number): string {
 export function ArtistHero({ artistName, hero, favoriteSong, onFavoritePress }: Props) {
   const colorScheme = useColorScheme() ?? 'light';
   const { colors, spacing, radius, elevation } = getTheme(colorScheme);
-
-  const hasSupporting = hero.supportingArtworkUrls.length > 0;
+  const { width } = useWindowDimensions();
+  const isSideBySide = width >= layout.breakpointWide || Platform.OS === 'web';
 
   return (
     <View
@@ -42,28 +42,20 @@ export function ArtistHero({ artistName, hero, favoriteSong, onFavoritePress }: 
         ]}
       />
 
-      <View style={[styles.inner, { padding: spacing.lg, gap: spacing.lg }]}>
-        <View style={[styles.artPanel, { borderRadius: radius.lg }]}>
+      <View
+        style={[
+          styles.inner,
+          isSideBySide ? styles.innerRow : styles.innerColumn,
+          { padding: spacing.lg, gap: spacing.lg },
+        ]}>
+        <View
+          style={[
+            styles.artPanel,
+            isSideBySide ? styles.artPanelSide : styles.artPanelStacked,
+            { borderRadius: radius.lg },
+          ]}>
           {hero.artworkUrl ? (
-            <View style={styles.asymmetric}>
-              <Image
-                source={{ uri: hero.artworkUrl }}
-                style={[styles.primaryArt, hasSupporting && styles.primaryArtSplit]}
-                contentFit="cover"
-              />
-              {hasSupporting ? (
-                <View style={styles.supportingCol}>
-                  {hero.supportingArtworkUrls.map((url, index) => (
-                    <Image
-                      key={`${url}-${index}`}
-                      source={{ uri: url }}
-                      style={styles.supportingArt}
-                      contentFit="cover"
-                    />
-                  ))}
-                </View>
-              ) : null}
-            </View>
+            <Image source={{ uri: hero.artworkUrl }} style={styles.profileArt} contentFit="cover" />
           ) : (
             <View style={[styles.fallback, { backgroundColor: colors.accentSoft }]}>
               <Text variant="display" tone="accent">
@@ -71,19 +63,9 @@ export function ArtistHero({ artistName, hero, favoriteSong, onFavoritePress }: 
               </Text>
             </View>
           )}
-          <View
-            style={[
-              styles.artScrim,
-              {
-                borderRadius: radius.lg,
-                backgroundColor: colors.accent,
-                opacity: 0.06,
-              },
-            ]}
-          />
         </View>
 
-        <View style={styles.copy}>
+        <View style={[styles.copy, isSideBySide && styles.copySide]}>
           {hero.achievementTitle ? (
             <View style={styles.achievementBlock}>
               <Text variant="label" tone="accent" style={styles.achievementTitle}>
@@ -188,50 +170,44 @@ const styles = StyleSheet.create({
     height: 180,
   },
   inner: {
-    flexDirection: Platform.OS === 'web' ? 'row' : 'column',
-    alignItems: Platform.OS === 'web' ? 'stretch' : undefined,
+    alignItems: 'stretch',
+  },
+  innerRow: {
+    flexDirection: 'row',
+  },
+  innerColumn: {
+    flexDirection: 'column',
   },
   artPanel: {
-    width: Platform.OS === 'web' ? 260 : '100%',
-    height: Platform.OS === 'web' ? 260 : undefined,
-    aspectRatio: Platform.OS === 'web' ? undefined : 1.1,
     overflow: 'hidden',
     flexShrink: 0,
     position: 'relative',
   },
-  asymmetric: {
-    flex: 1,
-    flexDirection: 'row',
-    gap: 3,
+  artPanelSide: {
+    width: 220,
+    alignSelf: 'stretch',
   },
-  primaryArt: {
-    flex: 1,
-    height: '100%',
-  },
-  primaryArtSplit: {
-    flex: 1.55,
-  },
-  supportingCol: {
-    flex: 1,
-    gap: 3,
-  },
-  supportingArt: {
-    flex: 1,
+  artPanelStacked: {
     width: '100%',
+    aspectRatio: 1,
+    maxWidth: 280,
+    alignSelf: 'center',
+  },
+  profileArt: {
+    ...StyleSheet.absoluteFill,
   },
   fallback: {
-    flex: 1,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  artScrim: {
-    ...StyleSheet.absoluteFill,
   },
   copy: {
     flex: 1,
     gap: 10,
     minWidth: 0,
-    justifyContent: 'center',
+  },
+  copySide: {
+    justifyContent: 'flex-start',
   },
   achievementBlock: {
     gap: 2,
@@ -254,7 +230,7 @@ const styles = StyleSheet.create({
   },
   favoriteCard: {
     marginTop: 6,
-    gap: 10,
+    gap: 12,
     borderWidth: StyleSheet.hairlineWidth,
     borderCurve: 'continuous',
   },
