@@ -1,74 +1,250 @@
-import { StyleSheet, View } from 'react-native';
+import { Image } from 'expo-image';
+import { SymbolView } from 'expo-symbols';
+import { Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
-import { Card, Text } from '@/components/ui';
+import { Button, Card, Text } from '@/components/ui';
 import { useColorScheme } from '@/components/useColorScheme';
-import { getTheme } from '@/constants/theme';
-import type { AlbumCollectionStats } from '@/lib/albums';
+import { getTheme, layout } from '@/constants/theme';
+import type { AlbumCollectionStats, AlbumSummary } from '@/lib/albums';
+
+import { AlbumProgressBar } from './AlbumProgressBar';
 
 type Props = {
   stats: AlbumCollectionStats;
+  featuredAlbum: AlbumSummary | null;
+  onViewAlbum: (key: string) => void;
 };
 
-export function AlbumCollectionHero({ stats }: Props) {
-  const colorScheme = useColorScheme() ?? 'light';
-  const { colors, spacing, radius } = getTheme(colorScheme);
+function confidenceTone(level: AlbumSummary['confidenceLevel']): 'accent' | 'secondary' | 'tertiary' {
+  if (level === 'high') return 'accent';
+  if (level === 'medium') return 'secondary';
+  return 'tertiary';
+}
 
-  const items = [
-    { label: 'Completed', value: String(stats.completedCount) },
-    { label: 'Exploring', value: String(stats.exploringCount) },
-    { label: 'Avg rating', value: stats.averageAlbumRating.toFixed(1) },
+export function AlbumCollectionHero({ stats, featuredAlbum, onViewAlbum }: Props) {
+  const colorScheme = useColorScheme() ?? 'light';
+  const { colors, spacing, radius, motion, elevation } = getTheme(colorScheme);
+  const { width } = useWindowDimensions();
+  const isWide = width >= layout.breakpointWide;
+
+  const statItems = [
+    { label: 'Albums completed', value: String(stats.completedCount) },
+    { label: 'Albums exploring', value: String(stats.exploringCount) },
+    { label: 'Average rating', value: stats.averageAlbumRating.toFixed(1) },
     { label: 'Hours ranked', value: stats.hoursRanked.toFixed(1) },
   ];
 
   return (
-    <Card elevated style={{ padding: spacing.lg, gap: spacing.md }}>
-      <View style={{ gap: 4 }}>
-        <Text variant="heading">Your collection</Text>
-        <Text variant="bodySmall" tone="secondary">
-          {stats.highestRatedAlbum
-            ? `Top album: ${stats.highestRatedAlbum.title} (${stats.highestRatedAlbum.score.toFixed(1)})`
-            : 'Start ranking albums to build your collection.'}
-        </Text>
-      </View>
+    <Card elevated style={{ padding: spacing.lg, gap: spacing.lg, overflow: 'hidden' }}>
+      <Text variant="overline" tone="tertiary">
+        Your collection
+      </Text>
 
-      <View style={styles.grid}>
-        {items.map((item) => (
+      {featuredAlbum ? (
+        <Pressable
+          onPress={() => onViewAlbum(featuredAlbum.key)}
+          style={({ pressed, hovered }) => [
+            styles.featured,
+            isWide && styles.featuredWide,
+            {
+              backgroundColor: featuredAlbum.isComplete ? colors.accentSoft : colors.surfaceMuted,
+              borderColor: featuredAlbum.isComplete ? colors.accentMuted : colors.border,
+              borderRadius: radius.lg,
+              padding: spacing.md,
+              opacity: pressed ? 0.95 : 1,
+              ...(Platform.OS === 'web' && hovered
+                ? {
+                    borderColor: colors.accentMuted,
+                    boxShadow: `0 14px 32px ${colors.shadow}`,
+                    transform: [{ translateY: -2 }],
+                  }
+                : null),
+              transitionDuration: `${motion.normal}ms`,
+            },
+          ]}>
           <View
-            key={item.label}
-            style={[styles.stat, { backgroundColor: colors.surfaceMuted, borderRadius: radius.md, padding: spacing.sm }]}>
-            <Text variant="metricSm">{item.value}</Text>
-            <Text variant="caption" tone="secondary">
-              {item.label}
-            </Text>
+            style={[
+              styles.artWrap,
+              isWide ? styles.artWide : styles.artCompact,
+              elevation.card,
+              { borderRadius: radius.md, overflow: 'hidden' },
+            ]}>
+            <Image
+              source={{ uri: featuredAlbum.artworkUrl ?? undefined }}
+              style={styles.artwork}
+              contentFit="cover"
+            />
           </View>
-        ))}
+
+          <View style={styles.featuredCopy}>
+            <Text variant="caption" tone="accent">
+              Your favorite album
+            </Text>
+            <Text variant="title" numberOfLines={2}>
+              {featuredAlbum.title}
+            </Text>
+            <Text variant="bodySmall" tone="secondary" numberOfLines={1}>
+              {featuredAlbum.artist}
+            </Text>
+
+            <View style={styles.metaRow}>
+              <Text variant="metricSm" tone="score">
+                {featuredAlbum.averageScore.toFixed(1)}
+              </Text>
+              <Text variant="caption" tone="secondary">
+                average
+              </Text>
+            </View>
+
+            <Text variant="caption" tone={confidenceTone(featuredAlbum.confidenceLevel)}>
+              {featuredAlbum.confidenceLabel}
+            </Text>
+
+            {featuredAlbum.isComplete ? (
+              <View style={[styles.completedBadge, { backgroundColor: colors.accent, borderRadius: radius.pill }]}>
+                <SymbolView
+                  name={{ ios: 'checkmark.seal.fill', android: 'verified', web: 'verified' }}
+                  tintColor="#fff"
+                  size={13}
+                />
+                <Text variant="caption" style={styles.completedText}>
+                  {featuredAlbum.completionStatus}
+                </Text>
+              </View>
+            ) : featuredAlbum.completionPct != null ? (
+              <View style={{ gap: 4, width: '100%' }}>
+                <AlbumProgressBar
+                  completionPct={featuredAlbum.completionPct}
+                  isComplete={false}
+                  showLabel
+                  height={7}
+                />
+              </View>
+            ) : (
+              <Text variant="caption" tone="secondary">
+                {featuredAlbum.rankedCount} song{featuredAlbum.rankedCount === 1 ? '' : 's'} ranked
+              </Text>
+            )}
+
+            <Button
+              title="View album →"
+              size="sm"
+              variant="secondary"
+              onPress={() => onViewAlbum(featuredAlbum.key)}
+            />
+          </View>
+        </Pressable>
+      ) : (
+        <View style={[styles.emptyFeatured, { backgroundColor: colors.surfaceMuted, borderRadius: radius.lg }]}>
+          <Text variant="bodySmall" tone="secondary">
+            Rank songs from albums or EPs to discover your favorite.
+          </Text>
+        </View>
+      )}
+
+      <View style={styles.statsSection}>
+        <Text variant="caption" tone="tertiary">
+          Collection overview
+        </Text>
+        <View style={styles.statsGrid}>
+          {statItems.map((item) => (
+            <View
+              key={item.label}
+              style={[
+                styles.stat,
+                { backgroundColor: colors.surfaceMuted, borderRadius: radius.md, padding: spacing.sm },
+              ]}>
+              <Text variant="metricSm">{item.value}</Text>
+              <Text variant="caption" tone="secondary">
+                {item.label}
+              </Text>
+            </View>
+          ))}
+        </View>
       </View>
 
-      <View style={{ gap: 2 }}>
-        {stats.favoriteArtist ? (
-          <Text variant="caption" tone="secondary">
-            Favorite artist · {stats.favoriteArtist}
-          </Text>
-        ) : null}
-        {stats.mostCompletedArtist ? (
-          <Text variant="caption" tone="tertiary">
-            Most completed · {stats.mostCompletedArtist}
-          </Text>
-        ) : null}
-      </View>
+      {stats.favoriteArtist || stats.mostCompletedArtist ? (
+        <View style={{ gap: 2 }}>
+          {stats.favoriteArtist ? (
+            <Text variant="caption" tone="secondary">
+              Favorite artist · {stats.favoriteArtist}
+            </Text>
+          ) : null}
+          {stats.mostCompletedArtist ? (
+            <Text variant="caption" tone="tertiary">
+              Most completed · {stats.mostCompletedArtist}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
     </Card>
   );
 }
 
 const styles = StyleSheet.create({
-  grid: {
+  featured: {
+    gap: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderCurve: 'continuous',
+  },
+  featuredWide: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  artWrap: {
+    backgroundColor: '#1a1a1a',
+    alignSelf: 'center',
+  },
+  artCompact: {
+    width: 200,
+    height: 200,
+  },
+  artWide: {
+    width: 180,
+    height: 180,
+    flexShrink: 0,
+  },
+  artwork: {
+    width: '100%',
+    height: '100%',
+  },
+  featuredCopy: {
+    flex: 1,
+    gap: 8,
+    minWidth: 0,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
+    marginTop: 4,
+  },
+  completedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  completedText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  emptyFeatured: {
+    padding: 20,
+  },
+  statsSection: {
+    gap: 8,
+  },
+  statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
   },
   stat: {
     flex: 1,
-    minWidth: 100,
+    minWidth: 120,
     gap: 2,
   },
 });

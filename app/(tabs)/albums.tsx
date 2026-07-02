@@ -132,7 +132,13 @@ export default function AlbumsScreen() {
           </Text>
         </View>
 
-        {catalog.sortedAlbums.length > 0 ? <AlbumCollectionHero stats={catalog.stats} /> : null}
+        {catalog.sortedAlbums.length > 0 ? (
+          <AlbumCollectionHero
+            stats={catalog.stats}
+            featuredAlbum={catalog.featuredAlbum}
+            onViewAlbum={openAlbum}
+          />
+        ) : null}
 
         {showSections && catalog.continueAlbum ? (
           <ContinueAlbumCard

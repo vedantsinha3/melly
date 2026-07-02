@@ -60,12 +60,12 @@ export type AlbumCollectionStats = {
   averageAlbumRating: number;
   hoursRanked: number;
   favoriteArtist: string | null;
-  highestRatedAlbum: { title: string; artist: string; score: number } | null;
   mostCompletedArtist: string | null;
 };
 
 export type AlbumCatalogViewModel = {
   stats: AlbumCollectionStats;
+  featuredAlbum: AlbumSummary | null;
   continueAlbum: AlbumSummary | null;
   favoriteAlbums: AlbumSummary[];
   exploringAlbums: AlbumSummary[];
@@ -384,17 +384,12 @@ export function buildAlbumCollectionStats(
   const mostCompletedArtist =
     [...artistCompleted.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? null;
 
-  const topAlbum = [...albums].sort((a, b) => favoriteSortScore(b) - favoriteSortScore(a))[0];
-
   return {
     completedCount,
     exploringCount,
     averageAlbumRating,
     hoursRanked: Number((msRanked / 3_600_000).toFixed(1)),
     favoriteArtist,
-    highestRatedAlbum: topAlbum
-      ? { title: topAlbum.title, artist: topAlbum.artist, score: topAlbum.averageScore }
-      : null,
     mostCompletedArtist,
   };
 }
@@ -426,6 +421,7 @@ export function buildAlbumCatalog(
 
   return {
     stats: buildAlbumCollectionStats(sortedAlbums, ratings),
+    featuredAlbum: favoriteAlbums[0] ?? sortedAlbums[0] ?? null,
     continueAlbum: pickContinueAlbum(sortedAlbums),
     favoriteAlbums,
     exploringAlbums,
