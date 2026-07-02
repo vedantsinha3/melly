@@ -182,14 +182,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const getSpotifyAccessToken = async (): Promise<string | null> => {
-    if (spotifyAccessToken) {
-      return spotifyAccessToken;
-    }
-
     const storedToken = await getStoredSpotifyAccessToken();
     if (storedToken) {
-      setSpotifyAccessToken(storedToken);
+      if (storedToken !== spotifyAccessToken) {
+        setSpotifyAccessToken(storedToken);
+      }
       return storedToken;
+    }
+
+    // If storage has no refreshable token, fall back to the in-memory token.
+    if (spotifyAccessToken) {
+      return spotifyAccessToken;
     }
 
     const {
