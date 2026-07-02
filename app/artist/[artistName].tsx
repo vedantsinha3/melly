@@ -129,7 +129,10 @@ export default function ArtistDetailScreen() {
               notes={detail.noteHighlights}
               onNotePress={openSong}
             />
-            <ArtistAlbums albums={detail.albums} onSongPress={openSong} />
+            <ArtistAlbums
+              albums={detail.albums}
+              onAlbumPress={(albumKey) => router.push(`/album/${encodeURIComponent(albumKey)}`)}
+            />
             <ArtistSongList
               songs={sortedSongs}
               sortMode={sortMode}

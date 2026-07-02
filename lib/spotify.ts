@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { SpotifySearchTrack, TopTracksTimeRange, Track } from '@/types';
+import type { SpotifyAlbumTrack, SpotifySearchTrack, TopTracksTimeRange, Track } from '@/types';
 
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
@@ -33,6 +33,11 @@ export function spotifyTrackToTrack(item: SpotifySearchTrack): Track {
     artist_names: item.artists.map((a) => a.name),
     album_name: item.album.name,
     album_art_url: item.album.images[0]?.url ?? null,
+    album_id: item.album.id ?? null,
+    album_type: item.album.album_type ?? null,
+    album_release_date: item.album.release_date ?? null,
+    album_total_tracks: item.album.total_tracks ?? null,
+    track_number: item.track_number ?? null,
     duration_ms: item.duration_ms,
     preview_url: item.preview_url,
     genre: null,
@@ -140,6 +145,54 @@ export async function getUserTopTracks(
 
   const data = await response.json();
   return data.items as SpotifySearchTrack[];
+}
+
+export async function getTrackById(accessToken: string, trackId: string): Promise<SpotifySearchTrack> {
+  const response = await fetch(`https://api.spotify.com/v1/tracks/${trackId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Spotify track lookup failed (${response.status}): ${body}`);
+  }
+
+  return (await response.json()) as SpotifySearchTrack;
+}
+
+export async function getAlbumTracks(accessToken: string, albumId: string): Promise<SpotifyAlbumTrack[]> {
+  const tracks: SpotifyAlbumTrack[] = [];
+  let nextUrl: string | null = `https://api.spotify.com/v1/albums/${albumId}/tracks?limit=50`;
+
+  while (nextUrl) {
+    const response = await fetch(nextUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`Spotify album tracks failed (${response.status}): ${body}`);
+    }
+
+    const payload = (await response.json()) as {
+      items: Array<{ id: string; name: string; track_number: number; duration_ms: number }>;
+      next: string | null;
+    };
+
+    tracks.push(
+      ...payload.items
+        .filter((item) => Boolean(item.id))
+        .map((item) => ({
+          id: item.id,
+          name: item.name,
+          track_number: item.track_number,
+          duration_ms: item.duration_ms,
+        })),
+    );
+    nextUrl = payload.next;
+  }
+
+  return tracks;
 }
 
 export async function upsertTrack(track: Track): Promise<void> {

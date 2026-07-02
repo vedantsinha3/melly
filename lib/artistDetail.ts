@@ -3,10 +3,13 @@ import {
   getHistogramChartMaxPct,
   type HistogramBucket,
 } from '@/lib/scoreHistogram';
+import { buildAlbumKey } from '@/lib/albums';
 import type { RatingWithTrack } from '@/types';
 
 export type ArtistSongRow = {
   ratingId: string;
+  albumKey: string;
+  albumType: 'Album' | 'EP';
   trackName: string;
   artistName: string;
   albumName: string;
@@ -35,7 +38,10 @@ export type ArtistHeroViewModel = {
 };
 
 export type ArtistAlbum = {
+  key: string;
   name: string;
+  artistName: string;
+  albumType: 'Album' | 'EP';
   artworkUrl: string | null;
   songCount: number;
   averageScore: number;
@@ -169,6 +175,8 @@ function toSongRow(rating: RatingWithTrack, pageArtist: string): ArtistSongRow {
   const notes = rating.notes?.trim() ?? '';
   return {
     ratingId: rating.id,
+    albumKey: buildAlbumKey(rating.track),
+    albumType: rating.track.album_type?.toLowerCase() === 'ep' ? 'EP' : 'Album',
     trackName: rating.track.name,
     artistName: pageArtist,
     albumName: rating.track.album_name,
@@ -184,19 +192,22 @@ function toSongRow(rating: RatingWithTrack, pageArtist: string): ArtistSongRow {
 function buildAlbums(songs: ArtistSongRow[]): ArtistAlbum[] {
   const map = new Map<string, ArtistSongRow[]>();
   for (const song of songs) {
-    const key = song.albumName?.trim() || 'Unknown album';
+    const key = song.albumKey;
     const list = map.get(key) ?? [];
     list.push(song);
     map.set(key, list);
   }
 
   return [...map.entries()]
-    .map(([name, albumSongs]) => {
+    .map(([key, albumSongs]) => {
       const scores = albumSongs.map((s) => s.score);
       const avg = Number((scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1));
       const best = [...albumSongs].sort((a, b) => b.score - a.score)[0];
       return {
-        name,
+        key,
+        name: albumSongs[0].albumName,
+        artistName: albumSongs[0].artistName,
+        albumType: albumSongs[0].albumType,
         artworkUrl: albumSongs.find((s) => s.artworkUrl)?.artworkUrl ?? null,
         songCount: albumSongs.length,
         averageScore: avg,

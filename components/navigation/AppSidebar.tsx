@@ -37,6 +37,12 @@ const NAV_ITEMS = [
     icon: { ios: 'music.note.list', android: 'library_music', web: 'library_music' } as const,
   },
   {
+    key: 'albums',
+    label: 'Albums',
+    href: '/(tabs)/albums' as const,
+    icon: { ios: 'square.stack.fill', android: 'album', web: 'album' } as const,
+  },
+  {
     key: 'import',
     label: 'Quick start',
     href: '/(tabs)/import' as const,
@@ -53,6 +59,9 @@ function isActiveRoute(pathname: string, href: string) {
   }
   if (href === '/(tabs)/library') {
     return pathname.includes('/library');
+  }
+  if (href === '/(tabs)/albums') {
+    return pathname.includes('/albums');
   }
   return pathname.includes('/import');
 }

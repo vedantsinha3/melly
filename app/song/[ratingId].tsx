@@ -139,7 +139,7 @@ export default function SongDetailScreen() {
             router.push(`/artist/${encodeURIComponent(detail.artistContext.name)}`)
           }
           onAlbumPress={() =>
-            router.push(`/album/${encodeURIComponent(detail.albumContext.name)}`)
+            router.push(`/album/${encodeURIComponent(detail.albumContext.key)}`)
           }
         />
 

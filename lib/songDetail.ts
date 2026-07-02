@@ -1,4 +1,5 @@
 import { estimateComparisonCount } from '@/lib/ranking';
+import { buildAlbumKey } from '@/lib/albums';
 import type { RatingWithTrack } from '@/types';
 
 export type NeighborSong = {
@@ -31,6 +32,7 @@ export type SongDetailViewModel = {
     songsRanked: number;
   };
   albumContext: {
+    key: string;
     name: string;
     averageScore: number;
     songsRanked: number;
@@ -154,6 +156,7 @@ export function buildSongDetail(
       songsRanked: artistRatings.length,
     },
     albumContext: {
+      key: buildAlbumKey(rating.track),
       name: albumName,
       averageScore: albumAverage,
       songsRanked: albumRatings.length,

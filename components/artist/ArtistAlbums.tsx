@@ -8,10 +8,10 @@ import type { ArtistAlbum } from '@/lib/artistDetail';
 
 type Props = {
   albums: ArtistAlbum[];
-  onSongPress: (ratingId: string) => void;
+  onAlbumPress: (albumKey: string) => void;
 };
 
-export function ArtistAlbums({ albums, onSongPress }: Props) {
+export function ArtistAlbums({ albums, onAlbumPress }: Props) {
   const colorScheme = useColorScheme() ?? 'light';
   const { colors, spacing, radius, motion } = getTheme(colorScheme);
 
@@ -23,8 +23,8 @@ export function ArtistAlbums({ albums, onSongPress }: Props) {
       <View style={[styles.grid, { gap: spacing.sm }]}>
         {albums.map((album) => (
           <Pressable
-            key={album.name}
-            onPress={() => onSongPress(album.bestSong.ratingId)}
+            key={album.key}
+            onPress={() => onAlbumPress(album.key)}
             style={({ pressed, hovered }) => [
               styles.card,
               {
@@ -51,6 +51,9 @@ export function ArtistAlbums({ albums, onSongPress }: Props) {
               <Text variant="caption" tone="secondary">
                 {album.averageScore.toFixed(1)} avg · {album.songCount}{' '}
                 {album.songCount === 1 ? 'song' : 'songs'}
+              </Text>
+              <Text variant="caption" tone="tertiary">
+                {album.albumType}
               </Text>
               <Text variant="caption" tone="tertiary" numberOfLines={1}>
                 Best: {album.bestSong.name}

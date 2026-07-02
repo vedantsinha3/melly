@@ -88,6 +88,20 @@ export default function TabLayout() {
             }}
           />
           <Tabs.Screen
+            name="albums"
+            options={{
+              title: 'Albums',
+              headerShown: false,
+              tabBarIcon: ({ color }) => (
+                <SymbolView
+                  name={{ ios: 'square.stack.fill', android: 'album', web: 'album' }}
+                  tintColor={color}
+                  size={22}
+                />
+              ),
+            }}
+          />
+          <Tabs.Screen
             name="import"
             options={{
               title: 'Quick start',
