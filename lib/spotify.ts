@@ -160,6 +160,61 @@ export async function getTrackById(accessToken: string, trackId: string): Promis
   return (await response.json()) as SpotifySearchTrack;
 }
 
+export async function getSpotifyReadToken(
+  getUserToken?: () => Promise<string | null>,
+): Promise<string> {
+  if (getUserToken) {
+    const userToken = await getUserToken();
+    if (userToken) return userToken;
+  }
+
+  return getClientCredentialsToken();
+}
+
+export async function searchSpotifyAlbumId(
+  accessToken: string,
+  albumName: string,
+  artistName: string,
+): Promise<string | null> {
+  const query = encodeURIComponent(`album:${albumName} artist:${artistName}`);
+  const response = await fetch(`https://api.spotify.com/v1/search?q=${query}&type=album&limit=5`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) return null;
+
+  const data = (await response.json()) as {
+    albums?: { items?: Array<{ id: string; name: string }> };
+  };
+  const items = data.albums?.items ?? [];
+  if (items.length === 0) return null;
+
+  const normalizedAlbum = albumName.trim().toLowerCase();
+  const exact = items.find((item) => item.name.trim().toLowerCase() === normalizedAlbum);
+  return exact?.id ?? items[0]?.id ?? null;
+}
+
+export async function resolveSpotifyAlbumId(
+  accessToken: string,
+  albumId: string | null | undefined,
+  rankedTrackIds: string[],
+  albumName: string,
+  artistName: string,
+): Promise<string | null> {
+  if (albumId?.trim()) return albumId;
+
+  for (const trackId of rankedTrackIds) {
+    try {
+      const track = await getTrackById(accessToken, trackId);
+      if (track.album.id?.trim()) return track.album.id;
+    } catch {
+      // Try the next ranked track.
+    }
+  }
+
+  return searchSpotifyAlbumId(accessToken, albumName, artistName);
+}
+
 export async function getAlbumTracks(accessToken: string, albumId: string): Promise<SpotifyAlbumTrack[]> {
   const tracks: SpotifyAlbumTrack[] = [];
   let nextUrl: string | null = `https://api.spotify.com/v1/albums/${albumId}/tracks?limit=50`;
@@ -175,7 +230,13 @@ export async function getAlbumTracks(accessToken: string, albumId: string): Prom
     }
 
     const payload = (await response.json()) as {
-      items: Array<{ id: string; name: string; track_number: number; duration_ms: number }>;
+      items: Array<{
+        id: string;
+        name: string;
+        track_number: number;
+        duration_ms: number;
+        artists?: { name: string }[];
+      }>;
       next: string | null;
     };
 
@@ -187,6 +248,7 @@ export async function getAlbumTracks(accessToken: string, albumId: string): Prom
           name: item.name,
           track_number: item.track_number,
           duration_ms: item.duration_ms,
+          artists: item.artists,
         })),
     );
     nextUrl = payload.next;
@@ -198,12 +260,32 @@ export async function getAlbumTracks(accessToken: string, albumId: string): Prom
 export async function upsertTrack(track: Track): Promise<void> {
   const { data: existing, error: lookupError } = await supabase
     .from('tracks')
-    .select('spotify_id')
+    .select('spotify_id, album_id, album_type, album_release_date, album_total_tracks, track_number')
     .eq('spotify_id', track.spotify_id)
     .maybeSingle();
 
   if (lookupError) throw lookupError;
-  if (existing) return;
+  if (existing) {
+    const patch: Partial<Track> = {};
+    if (!existing.album_id && track.album_id) patch.album_id = track.album_id;
+    if (!existing.album_type && track.album_type) patch.album_type = track.album_type;
+    if (!existing.album_release_date && track.album_release_date) {
+      patch.album_release_date = track.album_release_date;
+    }
+    if (!existing.album_total_tracks && track.album_total_tracks) {
+      patch.album_total_tracks = track.album_total_tracks;
+    }
+    if (!existing.track_number && track.track_number) patch.track_number = track.track_number;
+
+    if (Object.keys(patch).length > 0) {
+      const { error: updateError } = await supabase
+        .from('tracks')
+        .update(patch)
+        .eq('spotify_id', track.spotify_id);
+      if (updateError) throw updateError;
+    }
+    return;
+  }
 
   const { error: insertError } = await supabase.from('tracks').insert(track);
   if (insertError) {

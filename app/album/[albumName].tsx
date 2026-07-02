@@ -1,23 +1,37 @@
 import { Image } from 'expo-image';
+import { SymbolView } from 'expo-symbols';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { DetailShell } from '@/components/navigation/DetailShell';
 import { Button, Card, EmptyState, LoadingState, Screen, Text } from '@/components/ui';
 import { useAuth } from '@/contexts/AuthContext';
 import { getTheme } from '@/constants/theme';
 import { useColorScheme } from '@/components/useColorScheme';
-import { buildAlbumDetail, buildAlbumSummaries, type AlbumSummary } from '@/lib/albums';
+import {
+  buildAlbumDetail,
+  buildAlbumSummaries,
+  type AlbumRankedSong,
+  type AlbumSummary,
+} from '@/lib/albums';
 import { hasExistingRating, fetchRankedRatings } from '@/lib/ranking';
 import { buildScoreHistogram, getScoreBarColor } from '@/lib/scoreHistogram';
-import { getAlbumTracks, getTrackById, spotifyTrackToTrack, upsertTrack } from '@/lib/spotify';
+import {
+  getAlbumTracks,
+  getSpotifyReadToken,
+  getTrackById,
+  resolveSpotifyAlbumId,
+  spotifyTrackToTrack,
+  upsertTrack,
+} from '@/lib/spotify';
 
 type AlbumTrackRow = {
   id: string;
   title: string;
   trackNumber: number;
   durationMs: number;
+  artistNames: string;
 };
 
 function formatDuration(ms: number): string {
@@ -25,6 +39,14 @@ function formatDuration(ms: number): string {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+function normalizeTrackKey(title: string, artist: string): string {
+  return `${title.toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim()}|${artist
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()}`;
 }
 
 export default function AlbumDetailScreen() {
@@ -38,7 +60,9 @@ export default function AlbumDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [allAlbums, setAllAlbums] = useState<AlbumSummary[]>([]);
   const [libraryAverage, setLibraryAverage] = useState(0);
-  const [unrankedTracks, setUnrankedTracks] = useState<AlbumTrackRow[]>([]);
+  const [albumTracks, setAlbumTracks] = useState<AlbumTrackRow[]>([]);
+  const [tracklistError, setTracklistError] = useState<string | null>(null);
+  const [loadingTracklist, setLoadingTracklist] = useState(false);
   const [rankingTrackId, setRankingTrackId] = useState<string | null>(null);
 
   const selectedAlbum = useMemo(
@@ -49,6 +73,71 @@ export default function AlbumDetailScreen() {
     () => (selectedAlbum ? buildAlbumDetail(selectedAlbum, allAlbums, libraryAverage) : null),
     [selectedAlbum, allAlbums, libraryAverage],
   );
+  const tracklistAvailable = albumTracks.length > 0;
+  const rankedSongByTrackId = useMemo(() => {
+    if (!detail) return new Map<string, AlbumRankedSong>();
+    return new Map(detail.summary.rankedSongs.map((song) => [song.trackId, song]));
+  }, [detail]);
+  const rankedSongByFallbackKey = useMemo(() => {
+    if (!detail) return new Map<string, AlbumRankedSong>();
+    const map = new Map<string, AlbumRankedSong>();
+    for (const song of detail.summary.rankedSongs) {
+      map.set(normalizeTrackKey(song.title, detail.summary.artist), song);
+    }
+    return map;
+  }, [detail]);
+  const rankedFromTracklist = useMemo(() => {
+    if (!detail || !tracklistAvailable) return [];
+    return albumTracks
+      .map((track) => {
+        return (
+          rankedSongByTrackId.get(track.id) ??
+          rankedSongByFallbackKey.get(normalizeTrackKey(track.title, track.artistNames))
+        );
+      })
+      .filter((song): song is NonNullable<typeof song> => Boolean(song));
+  }, [detail, tracklistAvailable, albumTracks, rankedSongByTrackId, rankedSongByFallbackKey]);
+  const unrankedTracks = useMemo(() => {
+    if (!tracklistAvailable) return [];
+    const rankedIds = new Set(rankedFromTracklist.map((song) => song.trackId));
+    const rankedFallback = new Set(
+      rankedFromTracklist.map((song) => normalizeTrackKey(song.title, detail?.summary.artist ?? '')),
+    );
+    return albumTracks.filter(
+      (track) =>
+        !rankedIds.has(track.id) &&
+        !rankedFallback.has(normalizeTrackKey(track.title, track.artistNames)),
+    );
+  }, [tracklistAvailable, rankedFromTracklist, albumTracks, detail]);
+  const totalTrackCount = tracklistAvailable ? albumTracks.length : detail?.summary.totalTrackCount ?? null;
+  const rankedCount = tracklistAvailable ? rankedFromTracklist.length : detail?.summary.rankedCount ?? 0;
+  const completionPct =
+    totalTrackCount && totalTrackCount > 0 ? Math.round((rankedCount / totalTrackCount) * 100) : null;
+  const songsLeft = totalTrackCount && totalTrackCount > 0 ? Math.max(totalTrackCount - rankedCount, 0) : null;
+  const isComplete = Boolean(totalTrackCount && rankedCount === totalTrackCount);
+  const totalDurationMs = tracklistAvailable
+    ? albumTracks.reduce((sum, track) => sum + track.durationMs, 0)
+    : null;
+  const completionMessage = isComplete
+    ? "✓ Album Complete\nYou've ranked every song on this release."
+    : songsLeft != null
+      ? songsLeft === 1
+        ? '1 song left to complete this album.'
+        : `Rank ${songsLeft} more songs to complete this album.`
+      : tracklistError
+        ? tracklistError
+        : loadingTracklist
+          ? 'Loading album tracklist…'
+          : 'Load full tracklist to calculate completion.';
+  const rankedListRows = useMemo(() => {
+    if (!detail) return [];
+    if (tracklistAvailable) {
+      return rankedFromTracklist.slice().sort((a, b) => (a.trackNumber ?? 999) - (b.trackNumber ?? 999));
+    }
+    return detail.summary.rankedSongs
+      .slice()
+      .sort((a, b) => (a.trackNumber ?? 999) - (b.trackNumber ?? 999) || a.rankPosition - b.rankPosition);
+  }, [detail, tracklistAvailable, rankedFromTracklist]);
   const histogram = useMemo(
     () =>
       detail
@@ -71,33 +160,57 @@ export default function AlbumDetailScreen() {
       setAllAlbums(albums);
 
       const selected = albums.find((album) => album.key === albumKey);
-      if (!selected?.albumId) {
-        setUnrankedTracks([]);
+      if (!selected) {
+        setAlbumTracks([]);
+        setTracklistError(null);
         return;
       }
 
-      const token = await getSpotifyAccessToken();
-      if (!token) {
-        setUnrankedTracks([]);
+      setLoadingTracklist(true);
+      setTracklistError(null);
+
+      const token = await getSpotifyReadToken(getSpotifyAccessToken);
+
+      const spotifyAlbumId = await resolveSpotifyAlbumId(
+        token,
+        selected.albumId,
+        selected.rankedSongs.map((song) => song.trackId),
+        selected.title,
+        selected.artist,
+      );
+
+      if (!spotifyAlbumId) {
+        setAlbumTracks([]);
+        setTracklistError('Could not find this album on Spotify.');
         return;
       }
 
-      const albumTracks = await getAlbumTracks(token, selected.albumId);
-      const rankedTrackIds = new Set(selected.rankedSongs.map((song) => song.trackId));
-      const unranked = albumTracks
-        .filter((track) => !rankedTrackIds.has(track.id))
-        .map((track) => ({
+      for (const song of selected.rankedSongs) {
+        try {
+          const spotifyTrack = await getTrackById(token, song.trackId);
+          await upsertTrack(spotifyTrackToTrack(spotifyTrack));
+        } catch {
+          // Best effort metadata backfill.
+        }
+      }
+
+      const spotifyAlbumTracks = await getAlbumTracks(token, spotifyAlbumId);
+      setAlbumTracks(
+        spotifyAlbumTracks.map((track) => ({
           id: track.id,
           title: track.name,
           trackNumber: track.track_number,
           durationMs: track.duration_ms,
-        }));
-      setUnrankedTracks(unranked);
+          artistNames: track.artists?.map((artist) => artist.name).join(', ') ?? selected.artist,
+        })),
+      );
     } catch (error) {
       console.error(error);
       setAllAlbums([]);
-      setUnrankedTracks([]);
+      setAlbumTracks([]);
+      setTracklistError(error instanceof Error ? error.message : 'Failed to load album tracklist.');
     } finally {
+      setLoadingTracklist(false);
       setLoading(false);
     }
   }, [user, albumKey, getSpotifyAccessToken]);
@@ -166,15 +279,29 @@ export default function AlbumDetailScreen() {
   }
 
   const { summary } = detail;
-  const rankedFraction = summary.totalTrackCount
-    ? `${summary.rankedCount} of ${summary.totalTrackCount} songs ranked`
-    : `${summary.rankedCount} songs ranked`;
+  const rankedFraction = totalTrackCount ? `${rankedCount} / ${totalTrackCount} songs ranked` : `${rankedCount} songs ranked`;
+  const heroInsightRows = [
+    { icon: 'sparkles', label: `Your #${detail.rankAmongAlbums} album by average score` },
+    ...(libraryAverage > 0
+      ? [
+          {
+            icon: 'chart.line.uptrend.xyaxis',
+            label:
+              summary.averageScore >= libraryAverage
+                ? `${(summary.averageScore - libraryAverage).toFixed(1)} points above your library average`
+                : `${Math.abs(summary.averageScore - libraryAverage).toFixed(1)} points below your library average`,
+          },
+        ]
+      : []),
+    { icon: 'music.note', label: `${summary.bestSong.title} is your highest-rated track` },
+    { icon: 'checkmark.circle', label: totalTrackCount != null ? `${rankedCount} of ${totalTrackCount} songs ranked` : `${rankedCount} songs ranked` },
+  ];
 
   return (
     <DetailShell title={summary.title}>
       <Screen scroll edgeToEdge wide omitSafeArea contentStyle={styles.content}>
         <View style={{ gap: spacing.lg, paddingBottom: spacing['2xl'] }}>
-          <Card style={{ gap: spacing.md, padding: spacing.lg }}>
+          <Card style={{ gap: spacing.sm, padding: spacing.md }}>
             <View style={styles.heroRow}>
               <Image source={{ uri: summary.artworkUrl ?? undefined }} style={[styles.art, { borderRadius: radius.lg }]} contentFit="cover" />
               <View style={styles.heroCopy}>
@@ -191,42 +318,201 @@ export default function AlbumDetailScreen() {
                 </Text>
                 <Text variant="caption" tone="secondary">
                   {rankedFraction}
-                  {summary.completionPct != null ? ` · ${summary.completionPct}% complete` : ''}
+                  {completionPct != null ? ` · ${completionPct}% complete` : ''}
                 </Text>
                 <Text variant="caption" tone="tertiary">
-                  Best: {summary.bestSong.title}
+                  Best track: {summary.bestSong.title} · {summary.bestSong.score.toFixed(1)}
                 </Text>
+                {totalDurationMs ? (
+                  <Text variant="caption" tone="tertiary">
+                    {formatDuration(totalDurationMs)} total
+                  </Text>
+                ) : null}
               </View>
+            </View>
+            <View style={[styles.progressTrack, { backgroundColor: colors.surfaceMuted, borderRadius: radius.pill }]}>
+              <View
+                style={[
+                  styles.progressFill,
+                  {
+                    width: `${completionPct ?? 0}%`,
+                    backgroundColor: isComplete ? colors.accent : colors.accentMuted,
+                    borderRadius: radius.pill,
+                  },
+                ]}
+              />
             </View>
             <View
               style={[
                 styles.message,
                 {
-                  backgroundColor: detail.isComplete ? colors.accentSoft : colors.surfaceMuted,
+                  backgroundColor: isComplete ? colors.accentSoft : colors.surfaceMuted,
                   borderRadius: radius.md,
                 },
               ]}>
-              <Text variant="caption" tone={detail.isComplete ? 'accent' : 'secondary'}>
-                {detail.completionMessage}
+              <Text variant="caption" tone={isComplete ? 'accent' : 'secondary'}>
+                {completionMessage}
               </Text>
             </View>
           </Card>
 
           <Card style={{ gap: spacing.sm, padding: spacing.md }}>
-            <Text variant="heading">Album insights</Text>
-            {detail.insights.map((insight) => (
-              <Text key={insight} variant="bodySmall" tone="secondary">
-                {insight}
+            <View style={styles.sectionHead}>
+              <Text variant="heading">Ranked songs</Text>
+              <Text variant="caption" tone="tertiary">
+                {rankedCount} ranked
               </Text>
+            </View>
+            {rankedListRows.map((song) => (
+              <Pressable
+                key={song.ratingId}
+                onPress={() => router.push(`/song/${song.ratingId}`)}
+                style={({ pressed, hovered }) => [
+                  styles.songRow,
+                  {
+                    backgroundColor: colors.surface,
+                    borderRadius: radius.md,
+                    borderColor: colors.border,
+                    opacity: pressed ? 0.9 : 1,
+                    ...(Platform.OS === 'web' && hovered
+                      ? { borderColor: colors.accentMuted, boxShadow: `0 4px 14px ${colors.shadow}` }
+                      : null),
+                    transitionDuration: `${motion.fast}ms`,
+                  },
+                ]}>
+                <Text variant="caption" tone="tertiary" style={styles.trackNo}>
+                  {song.trackNumber ?? '—'}
+                </Text>
+                <Image
+                  source={{ uri: summary.artworkUrl ?? undefined }}
+                  style={[styles.rowArt, { borderRadius: radius.sm }]}
+                  contentFit="cover"
+                />
+                <View style={styles.songCopy}>
+                  <Text variant="label" numberOfLines={1}>
+                    {song.title}
+                  </Text>
+                  <Text variant="caption" tone="tertiary">
+                    #{song.rankPosition} overall · Ranked {new Date(song.rankedAt).toLocaleDateString()}
+                    {song.hasNotes ? ' · Notes' : ''}
+                  </Text>
+                </View>
+                <View style={[styles.scorePill, { backgroundColor: colors.accentSoft, borderRadius: radius.pill }]}>
+                  <Text variant="label" tone="score">
+                    {song.score.toFixed(1)}
+                  </Text>
+                </View>
+              </Pressable>
+            ))}
+          </Card>
+
+          <Card style={{ gap: spacing.sm, padding: spacing.md }}>
+            <View style={styles.sectionHead}>
+              <Text variant="heading">Unranked songs</Text>
+              <Text variant="caption" tone="tertiary">
+                {songsLeft ?? unrankedTracks.length} left
+              </Text>
+            </View>
+            {loadingTracklist ? (
+              <View style={[styles.trackLoading, { backgroundColor: colors.surfaceMuted, borderRadius: radius.md }]}>
+                <ActivityIndicator color={colors.accent} />
+                <Text variant="caption" tone="tertiary">
+                  Loading album tracklist…
+                </Text>
+              </View>
+            ) : tracklistError ? (
+              <View style={[styles.trackLoading, { backgroundColor: colors.surfaceMuted, borderRadius: radius.md }]}>
+                <Text variant="bodySmall" tone="secondary">
+                  {tracklistError}
+                </Text>
+              </View>
+            ) : unrankedTracks.length === 0 ? (
+              <View style={[styles.trackLoading, { backgroundColor: colors.surfaceMuted, borderRadius: radius.md }]}>
+                <Text variant="bodySmall" tone={isComplete ? 'accent' : 'secondary'}>
+                  {isComplete
+                    ? '✓ Every song on this album has been ranked.'
+                    : 'No unranked tracks found for this album.'}
+                </Text>
+              </View>
+            ) : (
+              unrankedTracks.map((song) => (
+                <View
+                  key={song.id}
+                  style={[
+                    styles.songRow,
+                    {
+                      backgroundColor: colors.surface,
+                      borderRadius: radius.md,
+                      borderColor: colors.border,
+                    },
+                  ]}>
+                  <Text variant="caption" tone="tertiary" style={styles.trackNo}>
+                    {song.trackNumber}
+                  </Text>
+                  <View style={styles.songCopy}>
+                    <Text variant="label" numberOfLines={1}>
+                      {song.title}
+                    </Text>
+                    <Text variant="caption" tone="tertiary">
+                      {song.artistNames} · {formatDuration(song.durationMs)}
+                    </Text>
+                  </View>
+                  <Button
+                    title={rankingTrackId === song.id ? 'Starting…' : 'Rank'}
+                    size="sm"
+                    onPress={() => void handleRankTrack(song.id)}
+                  />
+                </View>
+              ))
+            )}
+          </Card>
+
+          <Card style={{ gap: spacing.sm, padding: spacing.md }}>
+            <Text variant="heading">Album insights</Text>
+            {heroInsightRows.map((row) => (
+              <View key={row.label} style={styles.insightRow}>
+                <SymbolView
+                  name={{ ios: row.icon as never, android: 'insights', web: 'insights' }}
+                  tintColor={colors.accent}
+                  size={14}
+                />
+                <Text variant="bodySmall" tone="secondary" style={{ flex: 1 }}>
+                  {row.label}
+                </Text>
+              </View>
             ))}
           </Card>
 
           <Card style={{ gap: spacing.sm, padding: spacing.md }}>
             <Text variant="heading">Rating distribution</Text>
             {summary.rankedSongs.length < 3 ? (
-              <Text variant="bodySmall" tone="secondary">
-                Rank more songs to unlock a fuller distribution.
-              </Text>
+              <View style={{ gap: 8 }}>
+                {[1, 2, 3, 4, 5].map((value) => (
+                  <View key={value} style={styles.histRow}>
+                    <Text variant="caption" tone="tertiary" style={styles.histLabel}>
+                      {value}
+                    </Text>
+                    <View style={[styles.histTrack, { backgroundColor: colors.surfaceMuted, borderRadius: radius.pill }]}>
+                      <View
+                        style={[
+                          styles.histFill,
+                          {
+                            width: `${12 + value * 7}%`,
+                            backgroundColor: colors.surfaceHover,
+                            borderRadius: radius.pill,
+                          },
+                        ]}
+                      />
+                    </View>
+                    <Text variant="caption" tone="tertiary" style={styles.histCount}>
+                      ·
+                    </Text>
+                  </View>
+                ))}
+                <Text variant="bodySmall" tone="secondary">
+                  Rank more songs from this album to unlock a fuller distribution.
+                </Text>
+              </View>
             ) : (
               <View style={[styles.histogram, { gap: 6 }]}>
                 {histogram.map((bucket) => (
@@ -254,90 +540,6 @@ export default function AlbumDetailScreen() {
               </View>
             )}
           </Card>
-
-          <Card style={{ gap: spacing.sm, padding: spacing.md }}>
-            <Text variant="heading">Ranked songs</Text>
-            {summary.rankedSongs
-              .slice()
-              .sort((a, b) => (a.trackNumber ?? 999) - (b.trackNumber ?? 999) || a.rankPosition - b.rankPosition)
-              .map((song) => (
-                <Pressable
-                  key={song.ratingId}
-                  onPress={() => router.push(`/song/${song.ratingId}`)}
-                  style={({ pressed, hovered }) => [
-                    styles.songRow,
-                    {
-                      backgroundColor: colors.surface,
-                      borderRadius: radius.md,
-                      borderColor: colors.border,
-                      opacity: pressed ? 0.9 : 1,
-                      ...(Platform.OS === 'web' && hovered
-                        ? { borderColor: colors.accentMuted, boxShadow: `0 4px 14px ${colors.shadow}` }
-                        : null),
-                      transitionDuration: `${motion.fast}ms`,
-                    },
-                  ]}>
-                  <Text variant="caption" tone="tertiary" style={styles.trackNo}>
-                    {song.trackNumber ?? '—'}
-                  </Text>
-                  <View style={styles.songCopy}>
-                    <Text variant="label" numberOfLines={1}>
-                      {song.title}
-                    </Text>
-                    <Text variant="caption" tone="tertiary">
-                      #{song.rankPosition} overall · Ranked {new Date(song.rankedAt).toLocaleDateString()}
-                      {song.hasNotes ? ' · Notes' : ''}
-                    </Text>
-                  </View>
-                  <View style={[styles.scorePill, { backgroundColor: colors.accentSoft, borderRadius: radius.pill }]}>
-                    <Text variant="label" tone="score">
-                      {song.score.toFixed(1)}
-                    </Text>
-                  </View>
-                </Pressable>
-              ))}
-          </Card>
-
-          <Card style={{ gap: spacing.sm, padding: spacing.md }}>
-            <Text variant="heading">Unranked songs</Text>
-            {unrankedTracks.length === 0 ? (
-              <Text variant="bodySmall" tone="secondary">
-                {detail.isComplete
-                  ? 'Album complete.'
-                  : 'Rank more songs to unlock a fuller view of this album.'}
-              </Text>
-            ) : (
-              unrankedTracks.map((song) => (
-                <View
-                  key={song.id}
-                  style={[
-                    styles.songRow,
-                    {
-                      backgroundColor: colors.surface,
-                      borderRadius: radius.md,
-                      borderColor: colors.border,
-                    },
-                  ]}>
-                  <Text variant="caption" tone="tertiary" style={styles.trackNo}>
-                    {song.trackNumber}
-                  </Text>
-                  <View style={styles.songCopy}>
-                    <Text variant="label" numberOfLines={1}>
-                      {song.title}
-                    </Text>
-                    <Text variant="caption" tone="tertiary">
-                      {formatDuration(song.durationMs)}
-                    </Text>
-                  </View>
-                  <Button
-                    title={rankingTrackId === song.id ? 'Starting…' : 'Rank'}
-                    size="sm"
-                    onPress={() => void handleRankTrack(song.id)}
-                  />
-                </View>
-              ))
-            )}
-          </Card>
         </View>
       </Screen>
     </DetailShell>
@@ -359,8 +561,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   art: {
-    width: 116,
-    height: 116,
+    width: 132,
+    height: 132,
     backgroundColor: '#1a1a1a',
   },
   heroCopy: {
@@ -371,6 +573,18 @@ const styles = StyleSheet.create({
   message: {
     paddingHorizontal: 12,
     paddingVertical: 10,
+  },
+  progressTrack: {
+    height: 6,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+  },
+  sectionHead: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
   },
   songRow: {
     flexDirection: 'row',
@@ -383,6 +597,11 @@ const styles = StyleSheet.create({
     width: 22,
     textAlign: 'center',
   },
+  rowArt: {
+    width: 34,
+    height: 34,
+    backgroundColor: '#1a1a1a',
+  },
   songCopy: {
     flex: 1,
     gap: 2,
@@ -393,6 +612,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     alignItems: 'center',
+  },
+  trackLoading: {
+    minHeight: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 10,
+  },
+  insightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   histogram: {},
   histRow: {

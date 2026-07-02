@@ -51,6 +51,7 @@ export type SpotifyAlbumTrack = {
   name: string;
   track_number: number;
   duration_ms: number;
+  artists?: { name: string }[];
 };
 
 export type TopTracksTimeRange = 'short_term' | 'medium_term';
