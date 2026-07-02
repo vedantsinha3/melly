@@ -85,9 +85,6 @@ export function DashboardToolbar({
         <Text variant="title">{displayName}</Text>
       </View>
       <View style={[styles.toolbarActions, { gap: spacing.sm }]}>
-        {showImport && onImport ? (
-          <Button title="Quick start" variant="secondary" size="sm" onPress={onImport} />
-        ) : null}
         {onViewRanking ? (
           <Button
             title={showFullRanking ? 'Hide list' : 'Full list'}

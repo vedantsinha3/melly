@@ -1,9 +1,9 @@
+import { buildAlbumKey } from '@/lib/albums';
 import {
   buildScoreHistogram,
   getHistogramChartMaxPct,
   type HistogramBucket,
 } from '@/lib/scoreHistogram';
-import { buildAlbumKey } from '@/lib/albums';
 import type { RatingWithTrack } from '@/types';
 
 export type ArtistSongRow = {
