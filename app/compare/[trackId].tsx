@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useImportQueue } from '@/contexts/ImportQueueContext';
 import { buildPlacementSearchSteps } from '@/lib/comparisonPlacement';
 import { markOnboardingCompleted } from '@/lib/profile';
+import { goBackOrFallback } from '@/lib/navigation';
 import {
   applyComparison,
   calculateScoreForInsertion,
@@ -226,7 +227,7 @@ export default function CompareScreen() {
           {loadError}
         </Text>
         <Button title="Try again" onPress={loadData} />
-        <Button title="Go back" variant="ghost" onPress={() => router.back()} />
+        <Button title="Go back" variant="ghost" onPress={() => goBackOrFallback(router, '/(tabs)/search')} />
       </Screen>
     );
   }

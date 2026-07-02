@@ -26,6 +26,7 @@ import {
   type ArtistSortMode,
 } from '@/lib/artistDetail';
 import { fetchRankedRatings } from '@/lib/ranking';
+import { goBackOrFallback } from '@/lib/navigation';
 
 export default function ArtistDetailScreen() {
   const { artistName } = useLocalSearchParams<{ artistName: string }>();
@@ -93,7 +94,7 @@ export default function ArtistDetailScreen() {
           ctaTitle="Log a song"
           onPressCta={() => router.push('/(tabs)/search')}
           secondaryTitle="Back to dashboard"
-          onPressSecondary={() => router.back()}
+          onPressSecondary={() => goBackOrFallback(router, '/(tabs)')}
         />
         </Screen>
       </DetailShell>

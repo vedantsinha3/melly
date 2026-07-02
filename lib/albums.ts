@@ -56,8 +56,44 @@ function normalize(value: string): string {
 }
 
 export function buildAlbumKey(track: RatingWithTrack['track']): string {
-  if (track.album_id?.trim()) return `id:${track.album_id}`;
-  return `name:${normalize(track.album_name)}|artist:${normalize(track.artist_names[0] ?? 'unknown')}`;
+  const title = normalize(track.album_name);
+  const artist = normalize(track.artist_names[0] ?? 'unknown');
+  return `name:${title}|artist:${artist}`;
+}
+
+export function parseAlbumKey(albumKey: string): { title: string; artist: string } | null {
+  const decoded = decodeURIComponent(albumKey).trim();
+  const modernMatch = decoded.match(/^name:(.+)\|artist:([^|]+)(?:\|year:.+)?$/);
+  if (modernMatch) {
+    return { title: modernMatch[1].trim(), artist: modernMatch[2].trim() };
+  }
+  return null;
+}
+
+export function resolveAlbumSummary(albums: AlbumSummary[], albumKey: string): AlbumSummary | null {
+  const decodedKey = decodeURIComponent(albumKey).trim();
+  const directMatch = albums.find((album) => album.key === decodedKey);
+  if (directMatch) return directMatch;
+
+  if (decodedKey.startsWith('id:')) {
+    const albumId = decodedKey.slice(3).trim();
+    if (albumId) {
+      const byId = albums.find((album) => album.albumId === albumId);
+      if (byId) return byId;
+    }
+  }
+
+  const parsed = parseAlbumKey(decodedKey);
+  if (parsed) {
+    const normalizedTitle = normalize(parsed.title);
+    const normalizedArtist = normalize(parsed.artist);
+    const byNameArtist = albums.find(
+      (album) => normalize(album.title) === normalizedTitle && normalize(album.artist) === normalizedArtist,
+    );
+    if (byNameArtist) return byNameArtist;
+  }
+
+  return null;
 }
 
 function toAlbumType(value?: string | null): AlbumTypeValue {
@@ -69,10 +105,9 @@ function toAlbumType(value?: string | null): AlbumTypeValue {
 
 function isEligibleAlbumTrack(track: RatingWithTrack['track']): boolean {
   const kind = track.album_type?.trim().toLowerCase();
-  if (!kind) return true;
-  if (kind === 'single') return false;
   if (kind === 'compilation') return false;
-  return kind === 'album' || kind === 'ep';
+  if (kind === 'single' && track.album_total_tracks === 1) return false;
+  return true;
 }
 
 function average(scores: number[]): number {
@@ -115,10 +150,16 @@ function compareAlbumSort(a: AlbumSummary, b: AlbumSummary, mode: AlbumSortMode)
   }
 }
 
+function isCatalogAlbum(album: AlbumSummary): boolean {
+  if (album.totalTrackCount === 1) return false;
+  return true;
+}
+
 export function buildAlbumSummaries(
   ratings: RatingWithTrack[],
   sortMode: AlbumSortMode,
   filterMode: AlbumFilterMode,
+  options?: { catalogOnly?: boolean },
 ): AlbumSummary[] {
   const grouped = new Map<string, RatingWithTrack[]>();
 
@@ -167,9 +208,10 @@ export function buildAlbumSummaries(
     } satisfies AlbumSummary;
   });
 
-  const filtered = albums.filter((album) =>
-    filterMode === 'all' ? true : filterMode === 'album' ? album.albumType === 'album' : album.albumType === 'ep',
-  );
+  const filtered = albums.filter((album) => {
+    if (options?.catalogOnly && !isCatalogAlbum(album)) return false;
+    return filterMode === 'all' ? true : filterMode === 'album' ? album.albumType === 'album' : album.albumType === 'ep';
+  });
 
   return filtered.sort((a, b) => compareAlbumSort(a, b, sortMode));
 }

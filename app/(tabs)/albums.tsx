@@ -25,11 +25,11 @@ const SORT_OPTIONS: Array<{ value: AlbumSortMode; label: string }> = [
   { value: 'artist_az', label: 'Artist A-Z' },
 ];
 
-const FILTER_OPTIONS: Array<{ value: AlbumFilterMode; label: string }> = [
-  { value: 'all', label: 'All' },
-  { value: 'album', label: 'Albums' },
-  { value: 'ep', label: 'EPs' },
-];
+// const FILTER_OPTIONS: Array<{ value: AlbumFilterMode; label: string }> = [
+//   { value: 'all', label: 'All' },
+//   { value: 'album', label: 'Albums' },
+//   { value: 'ep', label: 'EPs' },
+// ];
 
 type UserMeta = {
   full_name?: string;
@@ -87,7 +87,7 @@ export default function AlbumsScreen() {
   );
 
   const albums = useMemo(
-    () => buildAlbumSummaries(ratings, sortMode, filterMode),
+    () => buildAlbumSummaries(ratings, sortMode, filterMode, { catalogOnly: true }),
     [ratings, sortMode, filterMode],
   );
 
@@ -140,33 +140,6 @@ export default function AlbumsScreen() {
                     {
                       backgroundColor: active ? colors.accentSoft : colors.surfaceMuted,
                       borderColor: active ? colors.accentMuted : 'transparent',
-                      borderRadius: radius.pill,
-                      opacity: pressed ? 0.85 : 1,
-                      ...(Platform.OS === 'web' && hovered && !active
-                        ? { backgroundColor: colors.surfaceHover }
-                        : null),
-                      transitionDuration: `${motion.fast}ms`,
-                    },
-                  ]}>
-                  <Text variant="caption" tone={active ? 'accent' : 'secondary'}>
-                    {option.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          <View style={[styles.chips, { gap: spacing.xs }]}>
-            {FILTER_OPTIONS.map((option) => {
-              const active = filterMode === option.value;
-              return (
-                <Pressable
-                  key={option.value}
-                  onPress={() => setFilterMode(option.value)}
-                  style={({ pressed, hovered }) => [
-                    styles.chip,
-                    {
-                      backgroundColor: active ? colors.surface : colors.surfaceMuted,
-                      borderColor: active ? colors.accent : 'transparent',
                       borderRadius: radius.pill,
                       opacity: pressed ? 0.85 : 1,
                       ...(Platform.OS === 'web' && hovered && !active

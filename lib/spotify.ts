@@ -257,37 +257,54 @@ export async function getAlbumTracks(accessToken: string, albumId: string): Prom
   return tracks;
 }
 
+function baseTrackPayload(track: Track) {
+  return {
+    spotify_id: track.spotify_id,
+    name: track.name,
+    artist_names: track.artist_names,
+    album_name: track.album_name,
+    album_art_url: track.album_art_url,
+    duration_ms: track.duration_ms,
+    preview_url: track.preview_url,
+    genre: track.genre,
+  };
+}
+
+function metadataPatch(track: Track): Partial<Track> {
+  const patch: Partial<Track> = {};
+  if (track.album_id) patch.album_id = track.album_id;
+  if (track.album_type) patch.album_type = track.album_type;
+  if (track.album_release_date) patch.album_release_date = track.album_release_date;
+  if (track.album_total_tracks) patch.album_total_tracks = track.album_total_tracks;
+  if (track.track_number) patch.track_number = track.track_number;
+  return patch;
+}
+
+async function patchTrackMetadataIfSupported(spotifyId: string, track: Track): Promise<void> {
+  const patch = metadataPatch(track);
+  if (Object.keys(patch).length === 0) return;
+
+  const { error } = await supabase.from('tracks').update(patch).eq('spotify_id', spotifyId);
+  if (error) {
+    // Album metadata columns require migration 002_tracks_album_metadata.sql.
+    console.warn('Track metadata patch skipped:', error.message);
+  }
+}
+
 export async function upsertTrack(track: Track): Promise<void> {
   const { data: existing, error: lookupError } = await supabase
     .from('tracks')
-    .select('spotify_id, album_id, album_type, album_release_date, album_total_tracks, track_number')
+    .select('spotify_id')
     .eq('spotify_id', track.spotify_id)
     .maybeSingle();
 
   if (lookupError) throw lookupError;
   if (existing) {
-    const patch: Partial<Track> = {};
-    if (!existing.album_id && track.album_id) patch.album_id = track.album_id;
-    if (!existing.album_type && track.album_type) patch.album_type = track.album_type;
-    if (!existing.album_release_date && track.album_release_date) {
-      patch.album_release_date = track.album_release_date;
-    }
-    if (!existing.album_total_tracks && track.album_total_tracks) {
-      patch.album_total_tracks = track.album_total_tracks;
-    }
-    if (!existing.track_number && track.track_number) patch.track_number = track.track_number;
-
-    if (Object.keys(patch).length > 0) {
-      const { error: updateError } = await supabase
-        .from('tracks')
-        .update(patch)
-        .eq('spotify_id', track.spotify_id);
-      if (updateError) throw updateError;
-    }
+    await patchTrackMetadataIfSupported(track.spotify_id, track);
     return;
   }
 
-  const { error: insertError } = await supabase.from('tracks').insert(track);
+  const { error: insertError } = await supabase.from('tracks').insert(baseTrackPayload(track));
   if (insertError) {
     const message = insertError.message.toLowerCase();
     if (message.includes('duplicate key')) {
@@ -296,4 +313,6 @@ export async function upsertTrack(track: Track): Promise<void> {
     }
     throw insertError;
   }
+
+  await patchTrackMetadataIfSupported(track.spotify_id, track);
 }

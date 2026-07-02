@@ -24,6 +24,7 @@ import {
   updateRatingNotes,
 } from '@/lib/ranking';
 import { buildSongDetail } from '@/lib/songDetail';
+import { goBackOrFallback } from '@/lib/navigation';
 
 export default function SongDetailScreen() {
   const { ratingId } = useLocalSearchParams<{ ratingId: string }>();
@@ -43,7 +44,7 @@ export default function SongDetailScreen() {
       const rating = await fetchRatingById(user.id, ratingId);
       if (!rating) {
         Alert.alert('Not found', 'This rating no longer exists.');
-        router.back();
+        goBackOrFallback(router, '/(tabs)/library');
         return;
       }
 
@@ -100,7 +101,7 @@ export default function SongDetailScreen() {
         onPress: async () => {
           try {
             await deleteRating(user.id, detail.rating.id);
-            router.back();
+            goBackOrFallback(router, '/(tabs)/library');
           } catch (error) {
             Alert.alert('Error', error instanceof Error ? error.message : 'Failed to delete');
           }
