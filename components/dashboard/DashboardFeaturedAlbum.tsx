@@ -1,7 +1,6 @@
-import { Image } from 'expo-image';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
-import { Card, Text } from '@/components/ui';
+import { Artwork, Card, Text } from '@/components/ui';
 import { useColorScheme } from '@/components/useColorScheme';
 import { getTheme } from '@/constants/theme';
 import type { AlbumSummary } from '@/lib/albums';
@@ -51,11 +50,7 @@ export function DashboardFeaturedAlbum({ album, onPress, onViewCollection }: Pro
             transitionDuration: `${motion.normal}ms`,
           },
         ]}>
-        <Image
-          source={{ uri: album.artworkUrl ?? undefined }}
-          style={[styles.art, { borderRadius: radius.md }]}
-          contentFit="cover"
-        />
+        <Artwork uri={album.artworkUrl} size="md" borderRadius="md" />
         <View style={styles.copy}>
           <Text variant="label" numberOfLines={2}>
             {album.title}
@@ -90,12 +85,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     borderCurve: 'continuous',
-  },
-  art: {
-    width: 72,
-    height: 72,
-    backgroundColor: '#1a1a1a',
-    flexShrink: 0,
   },
   copy: {
     flex: 1,

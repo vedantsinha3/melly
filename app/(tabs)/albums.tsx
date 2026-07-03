@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { Platform, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
 import {
   AlbumCollectionHero,
@@ -9,7 +9,7 @@ import {
   FavoriteAlbumCard,
 } from '@/components/album';
 import { DashboardToolbar } from '@/components/dashboard';
-import { Button, EmptyState, LoadingState, Screen, Text, wideScrollContentStyle } from '@/components/ui';
+import { Button, Chip, EmptyState, LoadingState, Screen, SectionHeader, Text, wideScrollContentStyle } from '@/components/ui';
 import { useColorScheme } from '@/components/useColorScheme';
 import { getTheme } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -52,7 +52,7 @@ function getDisplayName(user?: { email?: string | null; user_metadata?: UserMeta
 
 export default function AlbumsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
-  const { colors, spacing, radius, motion } = getTheme(colorScheme);
+  const { colors, spacing } = getTheme(colorScheme);
   const { user, requestSignOut, isSpotifyUser } = useAuth();
   const router = useRouter();
 
@@ -124,12 +124,10 @@ export default function AlbumsScreen() {
           onSignOut={requestSignOut}
         />
 
-        <View style={{ gap: spacing.xs }}>
-          <Text variant="heading">Favorite albums</Text>
-          <Text variant="bodySmall" tone="secondary">
-            Your curated collection — albums you&apos;ve truly explored.
-          </Text>
-        </View>
+        <SectionHeader
+          title="Favorite albums"
+          subtitle="Your curated collection — albums you've truly explored."
+        />
 
         {catalog.sortedAlbums.length > 0 ? (
           <AlbumCollectionHero
@@ -147,34 +145,17 @@ export default function AlbumsScreen() {
         ) : null}
 
         <View style={[styles.chips, { gap: spacing.xs }]}>
-          {SORT_OPTIONS.map((option) => {
-            const active = sortMode === option.value;
-            return (
-              <Pressable
-                key={option.value}
-                onPress={() => {
-                  setSortMode(option.value);
-                  setShowAllFavorites(false);
-                }}
-                style={({ pressed, hovered }) => [
-                  styles.chip,
-                  {
-                    backgroundColor: active ? colors.accentSoft : colors.surfaceMuted,
-                    borderColor: active ? colors.accentMuted : 'transparent',
-                    borderRadius: radius.pill,
-                    opacity: pressed ? 0.85 : 1,
-                    ...(Platform.OS === 'web' && hovered && !active
-                      ? { backgroundColor: colors.surfaceHover }
-                      : null),
-                    transitionDuration: `${motion.fast}ms`,
-                  },
-                ]}>
-                <Text variant="caption" tone={active ? 'accent' : 'secondary'}>
-                  {option.label}
-                </Text>
-              </Pressable>
-            );
-          })}
+          {SORT_OPTIONS.map((option) => (
+            <Chip
+              key={option.value}
+              label={option.label}
+              active={sortMode === option.value}
+              onPress={() => {
+                setSortMode(option.value);
+                setShowAllFavorites(false);
+              }}
+            />
+          ))}
         </View>
 
         {catalog.sortedAlbums.length === 0 ? (
@@ -264,12 +245,6 @@ const styles = StyleSheet.create({
   scroll: { flex: 1, width: '100%' },
   content: { flexGrow: 1 },
   chips: { flexDirection: 'row', flexWrap: 'wrap' },
-  chip: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderCurve: 'continuous',
-  },
   sectionHead: {
     flexDirection: 'row',
     alignItems: 'center',

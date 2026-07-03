@@ -1,7 +1,6 @@
-import { Image } from 'expo-image';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
-import { Text } from '@/components/ui';
+import { Artwork, Text } from '@/components/ui';
 import { getTheme } from '@/constants/theme';
 import { useColorScheme } from '@/components/useColorScheme';
 import type { SpotifySearchTrack } from '@/types';
@@ -16,7 +15,7 @@ type Props = {
 
 export function TrackFeedCard({ track, meta, onPress, loading, highlighted }: Props) {
   const colorScheme = useColorScheme() ?? 'light';
-  const { colors, radius, motion, elevation } = getTheme(colorScheme);
+  const { colors, radius, motion, elevation, spacing } = getTheme(colorScheme);
   const artists = track.artists?.map((a) => a.name).join(', ') ?? '';
 
   return (
@@ -32,6 +31,8 @@ export function TrackFeedCard({ track, meta, onPress, loading, highlighted }: Pr
           borderRadius: radius.lg,
           borderWidth: highlighted ? 2 : 1,
           borderColor: highlighted ? colors.accent : colors.border,
+          padding: spacing.sm + 2,
+          gap: spacing.sm + 2,
           opacity: loading ? 0.7 : pressed ? 0.92 : 1,
           ...(Platform.OS === 'web' && hovered
             ? {
@@ -43,14 +44,13 @@ export function TrackFeedCard({ track, meta, onPress, loading, highlighted }: Pr
           transitionDuration: `${motion.normal}ms`,
         },
       ]}>
-      <Image
-        source={{ uri: track.album?.images?.[0]?.url ?? undefined }}
-        style={[styles.artwork, { borderRadius: radius.md }]}
-        contentFit="cover"
-        transition={200}
+      <Artwork
+        uri={track.album?.images?.[0]?.url}
+        size="xl"
+        borderRadius="md"
       />
-      <View style={styles.meta}>
-        <Text variant="label" numberOfLines={2} style={styles.title}>
+      <View style={[styles.meta, { gap: spacing['2xs'] }]}>
+        <Text variant="label" numberOfLines={2}>
           {track.name}
         </Text>
         <Text variant="caption" tone="secondary" numberOfLines={1}>
@@ -63,14 +63,19 @@ export function TrackFeedCard({ track, meta, onPress, loading, highlighted }: Pr
         ) : null}
       </View>
       <View
+        pointerEvents="none"
         style={[
           styles.rankBtn,
           {
             backgroundColor: highlighted ? colors.accent : colors.accentSoft,
             borderRadius: radius.pill,
+            paddingHorizontal: spacing.sm + 2,
+            paddingVertical: spacing.xs + 2,
           },
         ]}>
-        <Text variant="caption" style={{ color: highlighted ? '#fff' : colors.accent, fontWeight: '600' }}>
+        <Text
+          variant="caption"
+          style={{ color: highlighted ? colors.onAccent : colors.accent, fontWeight: '600' }}>
           {loading ? '…' : 'Rank'}
         </Text>
       </View>
@@ -81,28 +86,12 @@ export function TrackFeedCard({ track, meta, onPress, loading, highlighted }: Pr
 const styles = StyleSheet.create({
   card: {
     width: 156,
-    padding: 10,
-    gap: 10,
-    borderCurve: 'continuous',
-  },
-  artwork: {
-    width: 136,
-    height: 136,
-    backgroundColor: '#1a1a1a',
     borderCurve: 'continuous',
   },
   meta: {
-    gap: 2,
     minHeight: 52,
-  },
-  title: {
-    fontSize: 13,
-    lineHeight: 17,
-    fontWeight: '600',
   },
   rankBtn: {
     alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
   },
 });

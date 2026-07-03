@@ -1,7 +1,12 @@
+export { Artwork } from './Artwork';
 export { Button } from './Button';
 export { Card } from './Card';
+export { Chip } from './Chip';
 export { EmptyState } from './EmptyState';
 export { LoadingState } from './LoadingState';
+export { MediaCard } from './MediaCard';
+export { Pill } from './Pill';
+export { ProgressBar } from './ProgressBar';
 export { Screen, wideScrollContentStyle } from './Screen';
 export { SectionHeader } from './SectionHeader';
 export { Text } from './Text';

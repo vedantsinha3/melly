@@ -4,7 +4,7 @@ import { FlatList, RefreshControl, ScrollView, StyleSheet, View } from 'react-na
 
 import { RankedListItem } from '@/components/RankedListItem';
 import { DashboardToolbar } from '@/components/dashboard';
-import { EmptyState, LoadingState, Screen, Text, wideScrollContentStyle } from '@/components/ui';
+import { EmptyState, LoadingState, Screen, SectionHeader, wideScrollContentStyle } from '@/components/ui';
 import { useColorScheme } from '@/components/useColorScheme';
 import { getTheme } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
@@ -99,36 +99,31 @@ export default function LibraryScreen() {
           onSignOut={requestSignOut}
         />
 
-        <View style={[styles.listSection, { gap: spacing.sm }]}>
-          <Text variant="heading">Your library</Text>
-          <Text variant="caption" tone="secondary">
-            All ranked songs in order.
-          </Text>
+        <SectionHeader title="Your library" subtitle="All ranked songs in order." />
 
-          {ratings.length === 0 ? (
-            <EmptyState
-              title="No songs ranked yet"
-              subtitle="Rank songs from Log song and they will appear here."
-              ctaTitle="Log a song"
-              onPressCta={() => router.push('/(tabs)/search')}
-              mark="M"
-            />
-          ) : (
-            <FlatList
-              data={ratings}
-              keyExtractor={(item) => item.id}
-              scrollEnabled={false}
-              contentContainerStyle={{ gap: spacing.sm }}
-              renderItem={({ item }) => (
-                <RankedListItem
-                  rating={item}
-                  highlighted={item.id === highlight}
-                  onPress={() => router.push(`/song/${item.id}`)}
-                />
-              )}
-            />
-          )}
-        </View>
+        {ratings.length === 0 ? (
+          <EmptyState
+            title="No songs ranked yet"
+            subtitle="Rank songs from Log song and they will appear here."
+            ctaTitle="Log a song"
+            onPressCta={() => router.push('/(tabs)/search')}
+            mark="M"
+          />
+        ) : (
+          <FlatList
+            data={ratings}
+            keyExtractor={(item) => item.id}
+            scrollEnabled={false}
+            contentContainerStyle={{ gap: spacing.sm }}
+            renderItem={({ item }) => (
+              <RankedListItem
+                rating={item}
+                highlighted={item.id === highlight}
+                onPress={() => router.push(`/song/${item.id}`)}
+              />
+            )}
+          />
+        )}
       </ScrollView>
     </Screen>
   );
@@ -145,5 +140,4 @@ const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
   },
-  listSection: {},
 });

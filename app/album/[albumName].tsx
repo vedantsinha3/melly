@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 
 import { DetailShell } from '@/components/navigation/DetailShell';
-import { Button, Card, EmptyState, LoadingState, Screen, Text } from '@/components/ui';
+import { Button, Card, EmptyState, LoadingState, Pill, Screen, SectionHeader, Text, Artwork } from '@/components/ui';
 import { useAuth } from '@/contexts/AuthContext';
 import { getTheme, layout } from '@/constants/theme';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -110,7 +110,7 @@ export default function AlbumDetailScreen() {
   const { albumName } = useLocalSearchParams<{ albumName: string }>();
   const albumKey = decodeURIComponent(albumName ?? '');
   const colorScheme = useColorScheme() ?? 'light';
-  const { colors, spacing, radius, motion, elevation } = getTheme(colorScheme);
+  const { colors, spacing, radius, motion, elevation, artwork } = getTheme(colorScheme);
   const { width } = useWindowDimensions();
   const isWide = width >= layout.breakpointWide;
   const { user, getSpotifyAccessToken } = useAuth();
@@ -340,10 +340,21 @@ export default function AlbumDetailScreen() {
   return (
     <DetailShell title={summary.title}>
       <Screen scroll edgeToEdge wide omitSafeArea contentStyle={styles.content}>
-        <View style={{ gap: spacing.lg, paddingBottom: spacing['2xl'] }}>
+        <View style={{ gap: spacing.md, paddingBottom: spacing.xl }}>
           <Card elevated style={{ padding: spacing.lg, gap: spacing.md }}>
-            <View style={[styles.hero, isWide && styles.heroWide]}>
-              <View style={[isWide ? styles.heroArtWide : styles.heroArtCompact, elevation.card, { borderRadius: radius.lg, overflow: 'hidden' }]}>
+            <View style={[styles.hero, isWide && styles.heroWide, { gap: spacing.lg }]}>
+              <View
+                style={[
+                  elevation.card,
+                  {
+                    width: isWide ? artwork.hero + spacing.lg : artwork.hero,
+                    height: isWide ? artwork.hero + spacing.lg : artwork.hero,
+                    borderRadius: radius.lg,
+                    overflow: 'hidden',
+                    backgroundColor: colors.artworkPlaceholder,
+                    alignSelf: isWide ? 'flex-start' : 'center',
+                  },
+                ]}>
                 <Image
                   source={{ uri: summary.artworkUrl ?? undefined }}
                   style={styles.heroArtImage}
@@ -351,7 +362,7 @@ export default function AlbumDetailScreen() {
                 />
               </View>
 
-              <View style={styles.heroBody}>
+              <View style={[styles.heroBody, { gap: spacing.md }]}>
                 <View style={{ gap: spacing.xs }}>
                   <Text variant="display" numberOfLines={2}>
                     {summary.title}
@@ -371,7 +382,9 @@ export default function AlbumDetailScreen() {
                     <Text variant="overline" tone="tertiary">
                       Average
                     </Text>
-                    <Text style={[styles.metric, { color: colors.text }]}>{summary.averageScore.toFixed(1)}</Text>
+                    <Text variant="metric" style={{ fontVariant: ['tabular-nums'] }}>
+                      {summary.averageScore.toFixed(1)}
+                    </Text>
                     <Text variant="caption" tone="tertiary">
                       {summary.confidenceLabel}
                     </Text>
@@ -425,20 +438,7 @@ export default function AlbumDetailScreen() {
                       onPress={handleRankNext}
                     />
                   ) : isComplete ? (
-                    <View
-                      style={[
-                        styles.completeBadge,
-                        { backgroundColor: colors.accentSoft, borderRadius: radius.md },
-                      ]}>
-                      <SymbolView
-                        name={{ ios: 'checkmark.circle.fill', android: 'check_circle', web: 'check_circle' }}
-                        tintColor={colors.accent}
-                        size={16}
-                      />
-                      <Text variant="label" tone="accent">
-                        Album complete
-                      </Text>
-                    </View>
+                    <Pill variant="success" label="Album complete" showSuccessIcon />
                   ) : null}
 
                   <View style={[styles.secondaryActions, { gap: spacing.sm }]}>
@@ -466,14 +466,16 @@ export default function AlbumDetailScreen() {
           </Card>
 
           <Card style={{ gap: spacing.md, padding: spacing.md }}>
-            <View style={styles.sectionHead}>
-              <Text variant="heading">Tracklist</Text>
-              <Text variant="caption" tone="tertiary">
-                {tracklistAvailable
-                  ? `${rankedCount} ranked · ${unrankedTracks.length} left`
-                  : `${rankedCount} ranked`}
-              </Text>
-            </View>
+            <SectionHeader
+              title="Tracklist"
+              rightElement={
+                <Text variant="caption" tone="tertiary">
+                  {tracklistAvailable
+                    ? `${rankedCount} ranked · ${unrankedTracks.length} left`
+                    : `${rankedCount} ranked`}
+                </Text>
+              }
+            />
 
             {loadingTracklist ? (
               <View style={[styles.trackLoading, { backgroundColor: colors.surfaceMuted, borderRadius: radius.md }]}>
@@ -517,11 +519,7 @@ export default function AlbumDetailScreen() {
                       <Text variant="caption" tone="tertiary" style={styles.trackNo}>
                         {row.trackNumber ?? '—'}
                       </Text>
-                      <Image
-                        source={{ uri: summary.artworkUrl ?? undefined }}
-                        style={[styles.rowArt, { borderRadius: radius.md }]}
-                        contentFit="cover"
-                      />
+                      <Artwork uri={summary.artworkUrl} size="xs" borderRadius="md" />
                       <View style={styles.trackCopy}>
                         <View style={styles.titleRow}>
                           <Text variant="label" numberOfLines={1} style={{ flex: 1 }}>
@@ -550,11 +548,7 @@ export default function AlbumDetailScreen() {
                           })}
                         </Text>
                       </View>
-                      <View style={[styles.scorePill, { backgroundColor: colors.accentSoft, borderRadius: radius.pill }]}>
-                        <Text variant="label" tone="score">
-                          {row.ranked.score.toFixed(1)}
-                        </Text>
-                      </View>
+                      <Pill variant="score" label={row.ranked.score.toFixed(1)} />
                     </Pressable>
                   ) : (
                     <View
@@ -570,11 +564,7 @@ export default function AlbumDetailScreen() {
                       <Text variant="caption" tone="tertiary" style={styles.trackNo}>
                         {row.trackNumber ?? '—'}
                       </Text>
-                      <Image
-                        source={{ uri: summary.artworkUrl ?? undefined }}
-                        style={[styles.rowArt, { borderRadius: radius.md }]}
-                        contentFit="cover"
-                      />
+                      <Artwork uri={summary.artworkUrl} size="xs" borderRadius="md" />
                       <View style={styles.trackCopy}>
                         <Text variant="label" numberOfLines={1}>
                           {row.title}
@@ -620,31 +610,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 24,
   },
-  hero: {
-    gap: 20,
-  },
+  hero: {},
   heroWide: {
     flexDirection: 'row',
     alignItems: 'flex-start',
   },
-  heroArtCompact: {
-    width: 220,
-    height: 220,
-    alignSelf: 'center',
-  },
-  heroArtWide: {
-    width: 240,
-    height: 240,
-    alignSelf: 'flex-start',
-  },
   heroArtImage: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#1a1a1a',
   },
   heroBody: {
     flex: 1,
-    gap: 14,
     minWidth: 0,
   },
   heroStats: {
@@ -655,36 +631,10 @@ const styles = StyleSheet.create({
     gap: 2,
     minWidth: 0,
   },
-  metric: {
-    fontSize: 28,
-    lineHeight: 32,
-    fontWeight: '600',
-    letterSpacing: -0.6,
-  },
-  progressTrack: {
-    height: 8,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-  },
-  completeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-  },
   secondaryActions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
-  },
-  sectionHead: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
   },
   trackRow: {
     flexDirection: 'row',
@@ -698,11 +648,6 @@ const styles = StyleSheet.create({
     width: 22,
     textAlign: 'center',
   },
-  rowArt: {
-    width: 48,
-    height: 48,
-    backgroundColor: '#1a1a1a',
-  },
   trackCopy: {
     flex: 1,
     gap: 2,
@@ -712,12 +657,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-  },
-  scorePill: {
-    minWidth: 44,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    alignItems: 'center',
   },
   trackLoading: {
     minHeight: 72,

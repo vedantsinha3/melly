@@ -185,7 +185,7 @@ export function AppSidebar({ onSignOut }: Props) {
             ]}
             accessibilityRole="button"
             accessibilityLabel="Sign out">
-            <View style={[styles.avatar, { backgroundColor: colors.accentSoft }]}>
+            <View style={[styles.avatar, { backgroundColor: colors.accentSoft, borderRadius: radius.pill }]}>
               <Text variant="label" tone="accent">
                 {initial}
               </Text>
@@ -255,7 +255,6 @@ const styles = StyleSheet.create({
   avatar: {
     width: 34,
     height: 34,
-    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
   },

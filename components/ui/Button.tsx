@@ -57,7 +57,7 @@ export function Button({
             borderWidth: 0,
             ...(isWebHover && variant === 'primary'
               ? {
-                  backgroundColor: '#148B3E',
+                  backgroundColor: colors.accentHover,
                   transform: [{ translateY: -1 }],
                   boxShadow: `0 4px 14px ${colors.shadowStrong}`,
                 }
@@ -74,14 +74,14 @@ export function Button({
       }}
       {...props}>
       {loading ? (
-        <ActivityIndicator color={isSolid ? '#fff' : colors.accent} />
+        <ActivityIndicator color={isSolid ? colors.onAccent : colors.accent} />
       ) : (
         <Text
           variant="label"
           style={[
             styles.label,
             {
-              color: isSolid ? '#fff' : variant === 'ghost' ? colors.textSecondary : colors.text,
+              color: isSolid ? colors.onAccent : variant === 'ghost' ? colors.textSecondary : colors.text,
               fontSize: isCompact ? 12 : 13,
               fontWeight: isSolid ? '600' : '500',
               letterSpacing: isSolid ? 0.1 : 0,

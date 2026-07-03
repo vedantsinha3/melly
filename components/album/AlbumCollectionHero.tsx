@@ -1,8 +1,7 @@
 import { Image } from 'expo-image';
-import { SymbolView } from 'expo-symbols';
 import { Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
-import { Button, Card, Text } from '@/components/ui';
+import { Button, Card, Pill, Text } from '@/components/ui';
 import { useColorScheme } from '@/components/useColorScheme';
 import { getTheme, layout } from '@/constants/theme';
 import type { AlbumCollectionStats, AlbumSummary } from '@/lib/albums';
@@ -101,16 +100,7 @@ export function AlbumCollectionHero({ stats, featuredAlbum, onViewAlbum }: Props
             </Text>
 
             {featuredAlbum.isComplete ? (
-              <View style={[styles.completedBadge, { backgroundColor: colors.accent, borderRadius: radius.pill }]}>
-                <SymbolView
-                  name={{ ios: 'checkmark.seal.fill', android: 'verified', web: 'verified' }}
-                  tintColor="#fff"
-                  size={13}
-                />
-                <Text variant="caption" style={styles.completedText}>
-                  {featuredAlbum.completionStatus}
-                </Text>
-              </View>
+              <Pill variant="success" label={featuredAlbum.completionStatus} />
             ) : featuredAlbum.completionPct != null ? (
               <View style={{ gap: 4, width: '100%' }}>
                 <AlbumProgressBar
@@ -218,18 +208,6 @@ const styles = StyleSheet.create({
     alignItems: 'baseline',
     gap: 6,
     marginTop: 4,
-  },
-  completedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  completedText: {
-    color: '#fff',
-    fontWeight: '600',
   },
   emptyFeatured: {
     padding: 20,

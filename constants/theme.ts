@@ -22,6 +22,9 @@ export const Colors = {
     scoreBandHigh: '#15803D',
     scoreBandMid: '#B8860B',
     scoreBandLow: '#C2413C',
+    accentHover: '#148B3E',
+    artworkPlaceholder: '#1A1A1A',
+    onAccent: '#FFFFFF',
     shadow: 'rgba(10, 10, 11, 0.04)',
     shadowStrong: 'rgba(10, 10, 11, 0.08)',
   },
@@ -46,12 +49,16 @@ export const Colors = {
     scoreBandHigh: '#4ADE80',
     scoreBandMid: '#FACC15',
     scoreBandLow: '#F87171',
+    accentHover: '#16A34A',
+    artworkPlaceholder: '#1A1A1A',
+    onAccent: '#FFFFFF',
     shadow: 'rgba(0, 0, 0, 0.18)',
     shadowStrong: 'rgba(0, 0, 0, 0.28)',
   },
 };
 
 export const spacing = {
+  '2xs': 2,
   xs: 4,
   sm: 8,
   md: 12,
@@ -59,6 +66,16 @@ export const spacing = {
   xl: 20,
   '2xl': 28,
   '3xl': 36,
+} as const;
+
+/** Standard square artwork sizes — use instead of arbitrary pixel widths. */
+export const artwork = {
+  xs: 48,
+  sm: 56,
+  md: 72,
+  lg: 96,
+  xl: 148,
+  hero: 200,
 } as const;
 
 export const radius = {
@@ -128,6 +145,7 @@ export function getTheme(colorScheme?: ColorSchemeName | null) {
     scheme,
     colors,
     spacing,
+    artwork,
     radius,
     typography,
     layout,

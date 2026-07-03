@@ -1,8 +1,7 @@
 import { Image } from 'expo-image';
-import { SymbolView } from 'expo-symbols';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
-import { Text } from '@/components/ui';
+import { Pill, Text } from '@/components/ui';
 import { useColorScheme } from '@/components/useColorScheme';
 import { getTheme } from '@/constants/theme';
 import type { AlbumSummary } from '@/lib/albums';
@@ -34,6 +33,7 @@ export function FavoriteAlbumCard({ album, onPress }: Props) {
           borderColor: album.isComplete ? colors.accentMuted : colors.border,
           borderRadius: radius.lg,
           padding: spacing.md,
+          gap: spacing.md,
           opacity: pressed ? 0.94 : 1,
           ...(Platform.OS === 'web' && hovered
             ? {
@@ -47,7 +47,7 @@ export function FavoriteAlbumCard({ album, onPress }: Props) {
         },
         elevation.subtle,
       ]}>
-      <View style={[styles.artWrap, { borderRadius: radius.md, overflow: 'hidden' }]}>
+      <View style={[styles.artWrap, { borderRadius: radius.md, overflow: 'hidden', backgroundColor: colors.artworkPlaceholder }]}>
         <Image source={{ uri: album.artworkUrl ?? undefined }} style={styles.artwork} contentFit="cover" />
       </View>
 
@@ -72,16 +72,7 @@ export function FavoriteAlbumCard({ album, onPress }: Props) {
         </Text>
 
         {album.isComplete ? (
-          <View style={[styles.completedBadge, { backgroundColor: colors.accent, borderRadius: radius.pill }]}>
-            <SymbolView
-              name={{ ios: 'checkmark.seal.fill', android: 'verified', web: 'verified' }}
-              tintColor="#fff"
-              size={13}
-            />
-            <Text variant="caption" style={styles.completedText}>
-              {album.completionStatus}
-            </Text>
-          </View>
+          <Pill variant="success" label={album.completionStatus} />
         ) : album.completionPct != null ? (
           <AlbumProgressBar completionPct={album.completionPct} isComplete={false} showLabel />
         ) : null}
@@ -96,14 +87,12 @@ const styles = StyleSheet.create({
     minWidth: 200,
     maxWidth: 280,
     flexGrow: 1,
-    gap: 12,
     borderWidth: StyleSheet.hairlineWidth,
     borderCurve: 'continuous',
   },
   artWrap: {
     width: '100%',
     aspectRatio: 1,
-    backgroundColor: '#1a1a1a',
   },
   artwork: {
     width: '100%',
@@ -112,18 +101,5 @@ const styles = StyleSheet.create({
   body: {
     gap: 4,
     minWidth: 0,
-  },
-  completedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    marginTop: 2,
-  },
-  completedText: {
-    color: '#fff',
-    fontWeight: '600',
   },
 });

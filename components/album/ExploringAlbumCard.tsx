@@ -1,7 +1,6 @@
-import { Image } from 'expo-image';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { Button, Text } from '@/components/ui';
+import { Artwork, Button, Text } from '@/components/ui';
 import { useColorScheme } from '@/components/useColorScheme';
 import { getTheme } from '@/constants/theme';
 import { getExploringProgressCopy, type AlbumSummary } from '@/lib/albums';
@@ -30,14 +29,10 @@ export function ExploringAlbumCard({ album, onPress, onContinue }: Props) {
           padding: spacing.md,
         },
       ]}>
-      <Pressable onPress={onPress} style={styles.main}>
-        <Image
-          source={{ uri: album.artworkUrl ?? undefined }}
-          style={[styles.artwork, { borderRadius: radius.md }]}
-          contentFit="cover"
-        />
+      <Pressable onPress={onPress} style={[styles.main, { gap: spacing.md }]}>
+        <Artwork uri={album.artworkUrl} size="md" borderRadius="md" />
 
-        <View style={styles.body}>
+        <View style={[styles.body, { gap: spacing.xs }]}>
           <Text variant="label" numberOfLines={1}>
             {album.title}
           </Text>
@@ -72,17 +67,9 @@ const styles = StyleSheet.create({
   main: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-  },
-  artwork: {
-    width: 72,
-    height: 72,
-    backgroundColor: '#1a1a1a',
-    flexShrink: 0,
   },
   body: {
     flex: 1,
-    gap: 6,
     minWidth: 0,
   },
 });

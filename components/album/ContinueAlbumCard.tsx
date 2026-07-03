@@ -1,7 +1,6 @@
-import { Image } from 'expo-image';
 import { StyleSheet, View } from 'react-native';
 
-import { Button, Card, Text } from '@/components/ui';
+import { Artwork, Button, Card, Text } from '@/components/ui';
 import { useColorScheme } from '@/components/useColorScheme';
 import { getTheme } from '@/constants/theme';
 import { getExploringProgressCopy, type AlbumSummary } from '@/lib/albums';
@@ -31,13 +30,9 @@ export function ContinueAlbumCard({ album, onRankNext }: Props) {
           Continue your album
         </Text>
 
-        <View style={styles.row}>
-          <Image
-            source={{ uri: album.artworkUrl ?? undefined }}
-            style={[styles.artwork, { borderRadius: radius.md }]}
-            contentFit="cover"
-          />
-          <View style={styles.copy}>
+        <View style={[styles.row, { gap: spacing.md }]}>
+          <Artwork uri={album.artworkUrl} size="lg" borderRadius="md" />
+          <View style={[styles.copy, { gap: spacing.xs }]}>
             <Text variant="title" numberOfLines={2}>
               {album.title}
             </Text>
@@ -68,17 +63,10 @@ export function ContinueAlbumCard({ album, onRankNext }: Props) {
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
-    gap: 14,
     alignItems: 'center',
-  },
-  artwork: {
-    width: 96,
-    height: 96,
-    backgroundColor: '#1a1a1a',
   },
   copy: {
     flex: 1,
-    gap: 4,
     minWidth: 0,
   },
 });

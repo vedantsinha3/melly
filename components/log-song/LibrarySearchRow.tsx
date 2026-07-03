@@ -1,7 +1,6 @@
-import { Image } from 'expo-image';
-import { ActivityIndicator, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
-import { Text } from '@/components/ui';
+import { Artwork, Button, Pill, Text } from '@/components/ui';
 import { getTheme } from '@/constants/theme';
 import { useColorScheme } from '@/components/useColorScheme';
 import { formatRankedDate } from '@/lib/librarySearch';
@@ -45,8 +44,6 @@ export function LibrarySearchRow({
       ? `#${rankPosition} overall · ${score.toFixed(1)}${rankedAt ? ` · ${formatRankedDate(rankedAt)}` : ''}`
       : null;
 
-  const actionVariant = variant === 'unranked' ? 'primary' : 'secondary';
-
   return (
     <Pressable
       onPress={onPress}
@@ -67,6 +64,7 @@ export function LibrarySearchRow({
           borderColor: selected ? colors.accent : colors.border,
           borderRadius: radius.lg,
           padding: spacing.sm,
+          gap: spacing.sm + 2,
           opacity: pressed ? 0.92 : 1,
           ...(Platform.OS === 'web' && hovered && !selected
             ? { borderColor: colors.accentMuted, backgroundColor: colors.surfaceHover }
@@ -75,20 +73,12 @@ export function LibrarySearchRow({
         },
       ]}>
       {variant === 'ranked' && rankPosition != null ? (
-        <View style={[styles.rankBadge, { backgroundColor: colors.surfaceMuted, borderRadius: radius.pill }]}>
-          <Text variant="caption" style={styles.rankText}>
-            #{rankPosition}
-          </Text>
-        </View>
+        <Pill variant="rank" label={`#${rankPosition}`} />
       ) : null}
 
-      <Image
-        source={{ uri: artworkUrl ?? undefined }}
-        style={[styles.artwork, { borderRadius: radius.sm }]}
-        contentFit="cover"
-      />
+      <Artwork uri={artworkUrl} size="xs" borderRadius="sm" />
 
-      <View style={styles.copy}>
+      <View style={[styles.copy, { gap: spacing['2xs'] }]}>
         <Text variant="label" numberOfLines={1}>
           {title}
         </Text>
@@ -108,30 +98,17 @@ export function LibrarySearchRow({
       </View>
 
       {variant === 'ranked' && score != null ? (
-        <View style={[styles.scorePill, { backgroundColor: colors.accentSoft, borderRadius: radius.pill }]}>
-          <Text variant="label" tone="score">
-            {score.toFixed(1)}
-          </Text>
-        </View>
+        <Pill variant="score" label={score.toFixed(1)} />
       ) : null}
 
-      <View
-        pointerEvents="none"
-        style={[
-          styles.action,
-          actionVariant === 'primary'
-            ? { backgroundColor: colors.accent, borderRadius: radius.md }
-            : { backgroundColor: colors.surfaceMuted, borderRadius: radius.md },
-        ]}>
-        {loading ? (
-          <ActivityIndicator color={actionVariant === 'primary' ? '#fff' : colors.accent} size="small" />
-        ) : (
-          <Text
-            variant="label"
-            style={actionVariant === 'primary' ? styles.actionPrimary : styles.actionSecondary}>
-            {actionLabel}
-          </Text>
-        )}
+      <View pointerEvents="none" style={styles.action}>
+        <Button
+          title={actionLabel}
+          size="sm"
+          variant={variant === 'unranked' ? 'primary' : 'secondary'}
+          loading={loading}
+          onPress={onPress}
+        />
       </View>
     </Pressable>
   );
@@ -141,52 +118,14 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
     borderWidth: StyleSheet.hairlineWidth,
     borderCurve: 'continuous',
   },
-  rankBadge: {
-    minWidth: 34,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    alignItems: 'center',
-    flexShrink: 0,
-  },
-  rankText: {
-    fontWeight: '700',
-    fontSize: 11,
-  },
-  artwork: {
-    width: 48,
-    height: 48,
-    backgroundColor: '#1a1a1a',
-    flexShrink: 0,
-  },
   copy: {
     flex: 1,
-    gap: 2,
     minWidth: 0,
   },
-  scorePill: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    minWidth: 44,
-    alignItems: 'center',
-    flexShrink: 0,
-  },
   action: {
-    minWidth: 108,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
     flexShrink: 0,
-  },
-  actionPrimary: {
-    color: '#FFFFFF',
-    fontSize: 12,
-  },
-  actionSecondary: {
-    fontSize: 12,
   },
 });
