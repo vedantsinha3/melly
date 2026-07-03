@@ -1,3 +1,4 @@
+import { spotifyFetch } from './spotifyFetch';
 import { supabase } from './supabase';
 import type { SpotifyAlbumTrack, SpotifySearchTrack, TopTracksTimeRange, Track } from '@/types';
 
@@ -10,30 +11,6 @@ type CacheEntry<T> = { expiresAt: number; value: T };
 const albumTracksCache = new Map<string, CacheEntry<SpotifyAlbumTrack[]>>();
 const trackByIdCache = new Map<string, CacheEntry<SpotifySearchTrack>>();
 const artistImageCache = new Map<string, CacheEntry<string | null>>();
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function spotifyFetch(accessToken: string, url: string): Promise<Response> {
-  let delayMs = 1000;
-
-  for (let attempt = 0; attempt < 4; attempt++) {
-    const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-
-    if (response.status !== 429) return response;
-    if (attempt === 3) return response;
-
-    const retryAfterHeader = response.headers.get('Retry-After');
-    const retryAfterMs = retryAfterHeader ? Number(retryAfterHeader) * 1000 : delayMs;
-    await sleep(Number.isFinite(retryAfterMs) && retryAfterMs > 0 ? retryAfterMs : delayMs);
-    delayMs = Math.min(delayMs * 2, 8000);
-  }
-
-  throw new Error('Spotify request failed');
-}
 
 function readCache<T>(cache: Map<string, CacheEntry<T>>, key: string): T | null {
   const hit = cache.get(key);
@@ -217,15 +194,16 @@ export async function getUserTopTracks(
   timeRange: TopTracksTimeRange,
   limit = 50,
 ): Promise<SpotifySearchTrack[]> {
-  const response = await fetch(
+  const response = await spotifyFetch(
+    accessToken,
     `https://api.spotify.com/v1/me/top/tracks?time_range=${timeRange}&limit=${limit}`,
-    {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    },
   );
 
   if (!response.ok) {
     const body = await response.text();
+    if (response.status === 429) {
+      throw new Error('Spotify is rate limiting requests. Try again in a moment.');
+    }
     throw new Error(`Spotify top tracks failed (${response.status}): ${body}`);
   }
 

@@ -1,9 +1,10 @@
 import {
-  getOnRepeatTracks,
-  getPlaylistTracksByName,
-  getRecentlyAddedTracks,
+  findPlaylistIdInList,
+  getLibraryTracks,
+  getPlaylistTracks,
   getRecentlyPlayed,
-  getSavedTracks,
+  getUserPlaylists,
+  type LibraryTracksBundle,
   type SpotifyFeedItem,
 } from '@/lib/spotifyUser';
 import { getUserTopTracks } from '@/lib/spotify';
@@ -19,48 +20,88 @@ export type FeedSection = {
 type BuildFeedOptions = {
   accessToken: string;
   rankedTrackIds: Set<string>;
+  forceRefresh?: boolean;
 };
+
+type RawFeedData = {
+  recentlyPlayed: SpotifyFeedItem[];
+  library: LibraryTracksBundle;
+  topShort: SpotifySearchTrack[];
+  discoverWeekly: SpotifyFeedItem[];
+  releaseRadar: SpotifyFeedItem[];
+};
+
+const FEED_RAW_CACHE_TTL_MS = 5 * 60 * 1000;
+
+let rawFeedCache: { key: string; expiresAt: number; data: RawFeedData } | null = null;
+
+export function invalidateLogSongFeedCache(): void {
+  rawFeedCache = null;
+}
 
 function filterUnranked(items: SpotifyFeedItem[], rankedTrackIds: Set<string>): SpotifyFeedItem[] {
   return items.filter((item) => !rankedTrackIds.has(item.track.id));
 }
 
-async function safeSection(
-  loader: () => Promise<SpotifyFeedItem[]>,
-): Promise<SpotifyFeedItem[]> {
+async function safeSection<T>(loader: () => Promise<T>, fallback: T): Promise<T> {
   try {
     return await loader();
   } catch (error) {
     console.warn('Feed section failed to load', error);
-    return [];
+    return fallback;
   }
 }
 
-export async function buildLogSongFeed({
-  accessToken,
-  rankedTrackIds,
-}: BuildFeedOptions): Promise<FeedSection[]> {
-  const [
-    recentlyPlayed,
-    recentlyLiked,
-    onRepeat,
-    discoverWeekly,
-    releaseRadar,
-    recentlyAdded,
-    topMedium,
-  ] = await Promise.all([
-    safeSection(() => getRecentlyPlayed(accessToken, 24)),
-    safeSection(() => getSavedTracks(accessToken, 24)),
-    safeSection(() => getOnRepeatTracks(accessToken, 20)),
-    safeSection(() => getPlaylistTracksByName(accessToken, 'Discover Weekly', 20)),
-    safeSection(() => getPlaylistTracksByName(accessToken, 'Release Radar', 20)),
-    safeSection(() => getRecentlyAddedTracks(accessToken, 20)),
-    safeSection(async () => {
-      const tracks = await getUserTopTracks(accessToken, 'medium_term' as TopTracksTimeRange);
-      return tracks.slice(0, 16).map((track) => ({ track, meta: 'All-time favorite' }));
-    }),
+const EMPTY_LIBRARY: LibraryTracksBundle = { saved: [], recentlyAdded: [] };
+
+async function fetchRawFeedData(accessToken: string, forceRefresh: boolean): Promise<RawFeedData> {
+  const cacheKey = accessToken.slice(0, 8);
+  if (
+    !forceRefresh &&
+    rawFeedCache &&
+    rawFeedCache.key === cacheKey &&
+    Date.now() < rawFeedCache.expiresAt
+  ) {
+    return rawFeedCache.data;
+  }
+
+  const [recentlyPlayed, library, topShort, playlists] = await Promise.all([
+    safeSection(() => getRecentlyPlayed(accessToken, 24), []),
+    safeSection(() => getLibraryTracks(accessToken, 24), EMPTY_LIBRARY),
+    safeSection(() => getUserTopTracks(accessToken, 'short_term', 20), []),
+    safeSection(() => getUserPlaylists(accessToken), []),
   ]);
 
+  const discoverId = findPlaylistIdInList(playlists, 'Discover Weekly');
+  const releaseRadarId = findPlaylistIdInList(playlists, 'Release Radar');
+
+  const [discoverWeekly, releaseRadar] = await Promise.all([
+    discoverId
+      ? safeSection(() => getPlaylistTracks(accessToken, discoverId, 20), [])
+      : Promise.resolve([]),
+    releaseRadarId
+      ? safeSection(() => getPlaylistTracks(accessToken, releaseRadarId, 20), [])
+      : Promise.resolve([]),
+  ]);
+
+  const data: RawFeedData = {
+    recentlyPlayed,
+    library,
+    topShort,
+    discoverWeekly,
+    releaseRadar,
+  };
+
+  rawFeedCache = {
+    key: cacheKey,
+    expiresAt: Date.now() + FEED_RAW_CACHE_TTL_MS,
+    data,
+  };
+
+  return data;
+}
+
+function buildSectionsFromRaw(raw: RawFeedData, rankedTrackIds: Set<string>): FeedSection[] {
   const sections: FeedSection[] = [];
 
   const pushSection = (
@@ -75,15 +116,46 @@ export async function buildLogSongFeed({
     }
   };
 
-  pushSection('recently_played', 'Recently played', 'Fresh from Spotify', recentlyPlayed);
-  pushSection('recently_liked', 'Recently liked', 'Songs you saved on Spotify', recentlyLiked);
-  pushSection('on_repeat', 'On repeat', 'Your most-played right now', onRepeat);
-  pushSection('discover_weekly', 'Discover Weekly', 'Your latest discoveries', discoverWeekly);
-  pushSection('release_radar', 'Release Radar', 'New music worth a spin', releaseRadar);
-  pushSection('recently_added', 'Recently added', 'New saves in your library', recentlyAdded);
+  const onRepeat = raw.topShort.map((track) => ({
+    track,
+    meta: 'On repeat lately',
+  }));
 
-  if (sections.length === 0) {
-    pushSection('top_tracks', 'Ready to rank', 'Start with songs you already love', topMedium);
+  pushSection('recently_played', 'Recently played', 'Fresh from Spotify', raw.recentlyPlayed);
+  pushSection('recently_liked', 'Recently liked', 'Songs you saved on Spotify', raw.library.saved);
+  pushSection('on_repeat', 'On repeat', 'Your most-played right now', onRepeat);
+  pushSection('discover_weekly', 'Discover Weekly', 'Your latest discoveries', raw.discoverWeekly);
+  pushSection('release_radar', 'Release Radar', 'New music worth a spin', raw.releaseRadar);
+  pushSection('recently_added', 'Recently added', 'New saves in your library', raw.library.recentlyAdded);
+
+  return sections;
+}
+
+export async function buildLogSongFeed({
+  accessToken,
+  rankedTrackIds,
+  forceRefresh = false,
+}: BuildFeedOptions): Promise<FeedSection[]> {
+  const raw = await fetchRawFeedData(accessToken, forceRefresh);
+  const sections = buildSectionsFromRaw(raw, rankedTrackIds);
+
+  if (sections.length > 0) {
+    return sections;
+  }
+
+  const topMedium = await safeSection(async () => {
+    const tracks = await getUserTopTracks(accessToken, 'medium_term' as TopTracksTimeRange, 16);
+    return tracks.map((track) => ({ track, meta: 'All-time favorite' }));
+  }, []);
+
+  const fallbackTracks = filterUnranked(topMedium, rankedTrackIds).slice(0, 12);
+  if (fallbackTracks.length > 0) {
+    sections.push({
+      id: 'top_tracks',
+      title: 'Ready to rank',
+      subtitle: 'Start with songs you already love',
+      tracks: fallbackTracks,
+    });
   }
 
   return sections;

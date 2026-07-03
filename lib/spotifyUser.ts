@@ -1,3 +1,4 @@
+import { spotifyGetJson } from '@/lib/spotifyFetch';
 import type { SpotifySearchTrack } from '@/types';
 
 export type SpotifyFeedItem = {
@@ -10,17 +11,27 @@ type SpotifyPlaylist = {
   name: string;
 };
 
-async function spotifyGet<T>(accessToken: string, path: string): Promise<T> {
-  const response = await fetch(`https://api.spotify.com/v1${path}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+type CacheEntry<T> = { expiresAt: number; value: T };
 
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Spotify API failed (${response.status}): ${body}`);
+const PLAYLIST_CACHE_TTL_MS = 10 * 60 * 1000;
+const playlistCache = new Map<string, CacheEntry<SpotifyPlaylist[]>>();
+
+function readCache<T>(cache: Map<string, CacheEntry<T>>, key: string): T | null {
+  const hit = cache.get(key);
+  if (!hit || Date.now() > hit.expiresAt) {
+    cache.delete(key);
+    return null;
   }
+  return hit.value;
+}
 
-  return response.json() as Promise<T>;
+function writeCache<T>(
+  cache: Map<string, CacheEntry<T>>,
+  key: string,
+  value: T,
+  ttlMs = PLAYLIST_CACHE_TTL_MS,
+): void {
+  cache.set(key, { expiresAt: Date.now() + ttlMs, value });
 }
 
 function formatPlayedMeta(playedAt: string): string {
@@ -55,11 +66,16 @@ function dedupeFeedItems(items: SpotifyFeedItem[]): SpotifyFeedItem[] {
   });
 }
 
+export type LibraryTracksBundle = {
+  saved: SpotifyFeedItem[];
+  recentlyAdded: SpotifyFeedItem[];
+};
+
 export async function getRecentlyPlayed(
   accessToken: string,
   limit = 20,
 ): Promise<SpotifyFeedItem[]> {
-  const data = await spotifyGet<{
+  const data = await spotifyGetJson<{
     items: Array<{ played_at: string; track: SpotifySearchTrack }>;
   }>(accessToken, `/me/player/recently-played?limit=${limit}`);
 
@@ -73,68 +89,84 @@ export async function getRecentlyPlayed(
   );
 }
 
-export async function getSavedTracks(accessToken: string, limit = 20): Promise<SpotifyFeedItem[]> {
-  const data = await spotifyGet<{
+export async function getLibraryTracks(
+  accessToken: string,
+  limit = 20,
+): Promise<LibraryTracksBundle> {
+  const data = await spotifyGetJson<{
     items: Array<{ added_at: string; track: SpotifySearchTrack }>;
   }>(accessToken, `/me/tracks?limit=${limit}`);
 
-  return dedupeFeedItems(
-    data.items
-      .filter((item) => item.track?.id)
-      .map((item) => ({
+  const items = data.items.filter((item) => item.track?.id);
+
+  return {
+    saved: dedupeFeedItems(
+      items.map((item) => ({
         track: item.track,
         meta: 'Liked on Spotify',
       })),
-  );
+    ),
+    recentlyAdded: dedupeFeedItems(
+      items.map((item) => ({
+        track: item.track,
+        meta: formatAddedMeta(item.added_at),
+      })),
+    ),
+  };
+}
+
+export async function getSavedTracks(accessToken: string, limit = 20): Promise<SpotifyFeedItem[]> {
+  const bundle = await getLibraryTracks(accessToken, limit);
+  return bundle.saved;
 }
 
 export async function getRecentlyAddedTracks(
   accessToken: string,
   limit = 20,
 ): Promise<SpotifyFeedItem[]> {
-  const data = await spotifyGet<{
-    items: Array<{ added_at: string; track: SpotifySearchTrack }>;
-  }>(accessToken, `/me/tracks?limit=${limit}`);
-
-  return dedupeFeedItems(
-    data.items
-      .filter((item) => item.track?.id)
-      .map((item) => ({
-        track: item.track,
-        meta: formatAddedMeta(item.added_at),
-      })),
-  );
+  const bundle = await getLibraryTracks(accessToken, limit);
+  return bundle.recentlyAdded;
 }
 
-async function findPlaylistId(accessToken: string, name: string): Promise<string | null> {
+type SpotifyPlaylistPage = {
+  items: SpotifyPlaylist[];
+  next: string | null;
+};
+
+export async function getUserPlaylists(accessToken: string): Promise<SpotifyPlaylist[]> {
+  const cacheKey = accessToken.slice(0, 8);
+  const cached = readCache(playlistCache, cacheKey);
+  if (cached) return cached;
+
+  const playlists: SpotifyPlaylist[] = [];
   let path: string | null = '/me/playlists?limit=50';
 
   while (path) {
-    const data: {
-      items: SpotifyPlaylist[];
-      next: string | null;
-    } = await spotifyGet(accessToken, path);
+    const page: SpotifyPlaylistPage = await spotifyGetJson<SpotifyPlaylistPage>(accessToken, path);
 
-    const match = data.items.find((playlist: SpotifyPlaylist) =>
-      playlist.name.toLowerCase().includes(name.toLowerCase()),
-    );
-    if (match) return match.id;
-
-    path = data.next ? data.next.replace('https://api.spotify.com/v1', '') : null;
+    playlists.push(...page.items);
+    path = page.next ? page.next.replace('https://api.spotify.com/v1', '') : null;
   }
 
-  return null;
+  writeCache(playlistCache, cacheKey, playlists);
+  return playlists;
 }
 
-export async function getPlaylistTracksByName(
+export function findPlaylistIdInList(
+  playlists: SpotifyPlaylist[],
+  name: string,
+): string | null {
+  const needle = name.toLowerCase();
+  const match = playlists.find((playlist) => playlist.name.toLowerCase().includes(needle));
+  return match?.id ?? null;
+}
+
+export async function getPlaylistTracks(
   accessToken: string,
-  playlistName: string,
+  playlistId: string,
   limit = 20,
 ): Promise<SpotifyFeedItem[]> {
-  const playlistId = await findPlaylistId(accessToken, playlistName);
-  if (!playlistId) return [];
-
-  const data = await spotifyGet<{
+  const data = await spotifyGetJson<{
     items: Array<{ track: SpotifySearchTrack | null }>;
   }>(accessToken, `/playlists/${playlistId}/tracks?limit=${limit}`);
 
@@ -146,6 +178,18 @@ export async function getPlaylistTracksByName(
         meta: 'Fresh from Spotify',
       })),
   );
+}
+
+export async function getPlaylistTracksByName(
+  accessToken: string,
+  playlistName: string,
+  limit = 20,
+): Promise<SpotifyFeedItem[]> {
+  const playlists = await getUserPlaylists(accessToken);
+  const playlistId = findPlaylistIdInList(playlists, playlistName);
+  if (!playlistId) return [];
+
+  return getPlaylistTracks(accessToken, playlistId, limit);
 }
 
 export async function getOnRepeatTracks(
