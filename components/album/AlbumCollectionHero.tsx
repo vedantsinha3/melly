@@ -127,9 +127,9 @@ export function AlbumCollectionHero({ stats, featuredAlbum, onViewAlbum }: Props
             )}
 
             <Button
-              title="View album →"
+              title="View album"
               size="sm"
-              variant="secondary"
+              variant="secondary" 
               onPress={() => onViewAlbum(featuredAlbum.key)}
             />
           </View>
